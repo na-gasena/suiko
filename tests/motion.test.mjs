@@ -5,7 +5,7 @@ import { defaults } from '../lib/revision.ts';
 
 const mark = { id: 'test-character', x: 180, y: 192 };
 test('existing eraser remains the default and never moves', () => {
-  assert.equal(defaults.motion, 'insect');
+  assert.equal(defaults.motion, 'eraser');
   assert.deepEqual(motionPose(mark, 15, 'eraser'), {
     x: 180,
     y: 192,

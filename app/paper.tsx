@@ -94,7 +94,7 @@ export default function Paper({
     const context = canvas.getContext('2d')!;
     const layer = document.createElement('canvas');
     const ink = layer.getContext('2d')!;
-    context.font = `34px ${paperFont(settings)}`;
+    context.font = `${settings.fontWeight ?? defaults.fontWeight} 34px ${paperFont(settings)}`;
     const glyphs = measureGlyphs(visibleText, settings);
     const change = diffText(committed, visibleText);
     // The projection surface can be much larger than the 960px logical paper.
@@ -137,7 +137,7 @@ export default function Paper({
       const now = Date.now();
       context.clearRect(0, 0, PAPER_WIDTH, height);
       ink.clearRect(0, 0, PAPER_WIDTH, height);
-      ink.font = `34px ${paperFont(settings)}`;
+      ink.font = `${settings.fontWeight ?? defaults.fontWeight} 34px ${paperFont(settings)}`;
       ink.fillStyle = inkColor;
       ink.globalCompositeOperation = 'source-over';
       for (const mark of marks) {
@@ -167,7 +167,7 @@ export default function Paper({
       context.globalAlpha = 0.34;
       context.drawImage(layer, 0, 0, PAPER_WIDTH, height);
       context.globalAlpha = 1;
-      context.font = `34px ${paperFont(settings)}`;
+      context.font = `${settings.fontWeight ?? defaults.fontWeight} 34px ${paperFont(settings)}`;
       context.fillStyle = inkColor;
       for (const mark of movingMarks) {
         const age = now - mark.createdAt;
@@ -192,7 +192,7 @@ export default function Paper({
         context.font = '13px system-ui, sans-serif';
         context.fillText(String(number).padStart(2, '0'), 92, 66);
       }
-      context.font = `34px ${paperFont(settings)}`;
+      context.font = `${settings.fontWeight ?? defaults.fontWeight} 34px ${paperFont(settings)}`;
       context.fillStyle = textColor;
       for (const glyph of editable ? [] : glyphs) {
         context.globalAlpha =

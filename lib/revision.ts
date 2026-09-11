@@ -37,13 +37,15 @@ export type Settings = {
   floatLift: number;
   invert: boolean;
   font: FontChoice;
+  fontWeight: number;
+  textAlign: 'left' | 'center';
   letterSpacing: number;
   lineSpacing: number;
   showComposition: boolean;
   retainComposition: boolean;
 };
 export const defaults: Settings = {
-  motion: 'insect',
+  motion: 'eraser',
   fadeSeconds: 12,
   residue: 7,
   insectSpeed: 100,
@@ -52,6 +54,8 @@ export const defaults: Settings = {
   floatLift: 100,
   invert: false,
   font: 'mincho',
+  fontWeight: 400,
+  textAlign: 'left',
   letterSpacing: 2,
   lineSpacing: 76,
   showComposition: true,

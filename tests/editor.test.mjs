@@ -183,6 +183,17 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
     });
     assert.ok(document.querySelector('.settings'));
     await act(async () => {
+      const weight = document.querySelector('#font-weight');
+      weight.value = '700';
+      weight.dispatchEvent(new win.Event('change', { bubbles: true }));
+      const align = document.querySelector('#text-align');
+      align.value = 'center';
+      align.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await sleep();
+    });
+    assert.equal(document.querySelector('textarea').style.fontWeight, '700');
+    assert.equal(document.querySelector('textarea').style.textAlign, 'center');
+    await act(async () => {
       document.querySelector('[aria-label="設定を隠す"]').click();
       await sleep();
     });
@@ -220,13 +231,31 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       '雨風',
       'projection receives the live full text',
     );
+    assert.equal(
+      projection.settings.fontWeight,
+      700,
+      'projection receives weight',
+    );
+    assert.equal(
+      projection.settings.textAlign,
+      'center',
+      'projection receives alignment',
+    );
+    await clickAria('一時停止');
+    await flush();
+    assert.equal((await read('sessions'))[0].phase, 'break');
     await change('雨', 'deleteContentBackward');
     await flush();
+    assert.equal(
+      (await read('sessions'))[0].phase,
+      'writing',
+      'ordinary edits resume timer',
+    );
     assert.equal((await read('marks')).length, 1);
     assert.equal((await read('marks'))[0].text, '風');
     await clickAria('一時停止');
     await flush();
-    assert.equal(document.querySelector('textarea').disabled, true);
+    assert.equal(document.querySelector('textarea').disabled, false);
     const paused = (await read('sessions'))[0];
     assert.equal(paused.phase, 'break');
     assert.equal(paused.activeSince, null);
@@ -247,16 +276,43 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
     );
     assert.equal(
       document.querySelector('textarea').disabled,
-      true,
-      'break state restores',
+      false,
+      'paused editor remains editable after reload',
     );
     assert.ok(
       document.querySelector('.paper-bottom').textContent.includes('1 文字'),
       'marks restore',
     );
-    await clickAria('再開');
+    assert.equal((await read('sessions'))[0].phase, 'break');
+    assert.equal(
+      document.querySelector('textarea').style.fontWeight,
+      '700',
+      'weight restores',
+    );
+    assert.equal(
+      document.querySelector('textarea').style.textAlign,
+      'center',
+      'alignment restores',
+    );
+    await act(async () => document.querySelector('textarea').focus());
+    assert.equal(
+      (await read('sessions'))[0].phase,
+      'break',
+      'focus alone keeps timer paused',
+    );
     assert.equal(document.querySelector('textarea').disabled, false);
     await composition('compositionstart', '');
+    await flush();
+    assert.equal(
+      (await read('sessions'))[0].phase,
+      'writing',
+      'IME typing resumes timer',
+    );
+    assert.equal(
+      (await read('sessions'))[0].activeMs,
+      paused.activeMs,
+      'pause time is excluded',
+    );
     await change('雨か', 'insertCompositionText');
     await composition('compositionupdate', 'か');
     await change('雨', 'deleteCompositionText');

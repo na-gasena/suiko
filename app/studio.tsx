@@ -340,7 +340,16 @@ function Editor() {
   }
   function begin() {
     const current = sessionRef.current;
-    if (!current || current.phase !== 'ready') return;
+    if (!current) return;
+    if (current.phase === 'break') {
+      record('resume', current.text, current.text, [], '', '', {
+        phase: 'writing',
+        activeSince: Date.now(),
+      });
+      setNow(Date.now());
+      return;
+    }
+    if (current.phase !== 'ready') return;
     const stamp = Date.now();
     syncSession({
       ...current,
@@ -529,6 +538,11 @@ function Editor() {
               numberOr(stored.letterSpacing, defaults.letterSpacing),
             ),
           ),
+          fontWeight: Math.max(
+            400,
+            Math.min(900, numberOr(stored.fontWeight, defaults.fontWeight)),
+          ),
+          textAlign: stored.textAlign === 'center' ? 'center' : 'left',
           lineSpacing: Math.max(
             48,
             Math.min(120, numberOr(stored.lineSpacing, defaults.lineSpacing)),
@@ -948,6 +962,45 @@ function Editor() {
               </div>
               <div className="setting">
                 <div className="setting-head">
+                  <label htmlFor="font-weight">文字の太さ</label>
+                </div>
+                <select
+                  id="font-weight"
+                  className="font-select"
+                  value={settings.fontWeight}
+                  disabled={locked || composing}
+                  onChange={(event) =>
+                    changeSettings({
+                      fontWeight: Number(event.currentTarget.value),
+                    })
+                  }
+                >
+                  <option value={400}>標準</option>
+                  <option value={700}>太い</option>
+                </select>
+              </div>
+              <div className="setting">
+                <div className="setting-head">
+                  <label htmlFor="text-align">文字揃え</label>
+                </div>
+                <select
+                  id="text-align"
+                  className="font-select"
+                  value={settings.textAlign}
+                  disabled={locked || composing}
+                  onChange={(event) =>
+                    changeSettings({
+                      textAlign: event.currentTarget
+                        .value as Settings['textAlign'],
+                    })
+                  }
+                >
+                  <option value="left">左揃え</option>
+                  <option value="center">中央揃え</option>
+                </select>
+              </div>
+              <div className="setting">
+                <div className="setting-head">
                   <span>文字詰め</span>
                   <output>{settings.letterSpacing} px</output>
                 </div>
@@ -1169,7 +1222,7 @@ function Editor() {
               value={draft}
               placeholder="ここに入力"
               maxLength={2000}
-              disabled={locked || session.phase === 'break'}
+              disabled={locked}
               spellCheck={false}
               onChange={(e) => {
                 const value = e.currentTarget.value;

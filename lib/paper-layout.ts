@@ -39,6 +39,8 @@ export function paperTextStyleFor(
   return {
     ...paperTextStyle,
     fontFamily: paperFont(settings),
+    fontWeight: settings.fontWeight ?? defaults.fontWeight,
+    textAlign: settings.textAlign ?? defaults.textAlign,
     lineHeight: `${settings.lineSpacing}px`,
     letterSpacing: `${settings.letterSpacing}px`,
   };
@@ -51,11 +53,11 @@ export function measurePaperText(
   text: string,
   settings: Settings = defaults,
 ): PaperLayout {
-  const key = `${text}\u0000${settings.font}\u0000${settings.letterSpacing}\u0000${settings.lineSpacing}`;
+  const key = `${text}\u0000${settings.font}\u0000${settings.letterSpacing}\u0000${settings.lineSpacing}\u0000${settings.fontWeight}\u0000${settings.textAlign}`;
   const cached = cache.get(key);
   if (cached) return cached;
   const context = document.createElement('canvas').getContext('2d')!;
-  context.font = `34px ${paperFont(settings)}`;
+  context.font = `${settings.fontWeight ?? defaults.fontWeight} 34px ${paperFont(settings)}`;
   const fallback = () => {
     const glyphs = layoutText(
       text,
