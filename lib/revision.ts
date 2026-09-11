@@ -39,7 +39,6 @@ export type Settings = {
   font: FontChoice;
   letterSpacing: number;
   lineSpacing: number;
-  kerning: boolean;
   showComposition: boolean;
   retainComposition: boolean;
 };
@@ -55,7 +54,6 @@ export const defaults: Settings = {
   font: 'mincho',
   letterSpacing: 2,
   lineSpacing: 76,
-  kerning: false,
   showComposition: true,
   retainComposition: false,
 };

@@ -41,7 +41,6 @@ export function paperTextStyleFor(
     fontFamily: paperFont(settings),
     lineHeight: `${settings.lineSpacing}px`,
     letterSpacing: `${settings.letterSpacing}px`,
-    fontKerning: settings.kerning ? 'normal' : 'none',
   };
 }
 
@@ -52,7 +51,7 @@ export function measurePaperText(
   text: string,
   settings: Settings = defaults,
 ): PaperLayout {
-  const key = `${text}\u0000${settings.font}\u0000${settings.letterSpacing}\u0000${settings.lineSpacing}\u0000${settings.kerning}`;
+  const key = `${text}\u0000${settings.font}\u0000${settings.letterSpacing}\u0000${settings.lineSpacing}`;
   const cached = cache.get(key);
   if (cached) return cached;
   const context = document.createElement('canvas').getContext('2d')!;

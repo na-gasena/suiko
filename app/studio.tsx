@@ -533,10 +533,6 @@ function Editor() {
             48,
             Math.min(120, numberOr(stored.lineSpacing, defaults.lineSpacing)),
           ),
-          kerning:
-            typeof stored.kerning === 'boolean'
-              ? stored.kerning
-              : defaults.kerning,
           showComposition:
             typeof stored.showComposition === 'boolean'
               ? stored.showComposition
@@ -993,17 +989,6 @@ function Editor() {
                   checked={settings.invert}
                   disabled={locked || composing}
                   onCheckedChange={(value) => changeSettings({ invert: value })}
-                />
-              </div>
-              <div className="toggle-row">
-                <label htmlFor="font-kerning">カーニング</label>
-                <Switch
-                  id="font-kerning"
-                  checked={settings.kerning}
-                  disabled={locked || composing}
-                  onCheckedChange={(value) =>
-                    changeSettings({ kerning: value })
-                  }
                 />
               </div>
               {settings.motion === 'eraser' && (
