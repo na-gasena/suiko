@@ -4,7 +4,7 @@
 
 ## GitHub Pages
 
-公開URL: https://na-gasena.github.io/suiko-no-ato/
+公開URL: https://na-gasena.github.io/suiko/
 
 `npm ci`、`npm run build:pages` で静的サイトを `out/` に生成します。`npm run preview:pages` でその出力を確認できます。GitHub の Settings → Pages で Source を GitHub Actions にすると、`main` への push で自動公開します。
 
