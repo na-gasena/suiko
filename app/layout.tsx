@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
-  icons: { icon: '/favicon.svg' },
+  icons: { icon: '/favicon.svg?v=2' },
   title: '推敲エディタ',
   description:
     '消した言葉の跡を紙面に残し、推敲の時間を記録するパフォーマンス用エディタ。',
