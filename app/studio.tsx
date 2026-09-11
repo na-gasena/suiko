@@ -542,7 +542,10 @@ function Editor() {
             400,
             Math.min(900, numberOr(stored.fontWeight, defaults.fontWeight)),
           ),
-          textAlign: stored.textAlign === 'center' ? 'center' : 'left',
+          textAlign:
+            stored.textAlign === 'left' || stored.textAlign === 'center'
+              ? stored.textAlign
+              : defaults.textAlign,
           lineSpacing: Math.max(
             48,
             Math.min(120, numberOr(stored.lineSpacing, defaults.lineSpacing)),
