@@ -10,7 +10,6 @@ import {
   Plus,
   Settings2,
 } from 'lucide-react';
-import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import {
   Sheet,
@@ -60,6 +59,7 @@ import {
   type SavedSession,
 } from '@/lib/storage';
 import Paper, { measureGlyphs } from './paper';
+import NumericSetting from './numeric-setting';
 import { measurePaperText, paperTextStyleFor } from '@/lib/paper-layout';
 import { MotionPicker } from './motion-study';
 
@@ -931,7 +931,7 @@ function Editor() {
               <div className="section-label">
                 <span>紙面の設定</span>
               </div>
-              <div className="setting">
+              <div className="setting choice-setting">
                 <div className="setting-head">
                   <span>消した文字の動き</span>
                 </div>
@@ -941,7 +941,7 @@ function Editor() {
                   disabled={locked || composing}
                 />
               </div>
-              <div className="setting">
+              <div className="setting choice-setting">
                 <div className="setting-head">
                   <label htmlFor="font-choice">フォント</label>
                 </div>
@@ -963,7 +963,7 @@ function Editor() {
                   ))}
                 </select>
               </div>
-              <div className="setting">
+              <div className="setting choice-setting">
                 <div className="setting-head">
                   <label htmlFor="font-weight">文字の太さ</label>
                 </div>
@@ -982,7 +982,7 @@ function Editor() {
                   <option value={700}>太い</option>
                 </select>
               </div>
-              <div className="setting">
+              <div className="setting choice-setting">
                 <div className="setting-head">
                   <label htmlFor="text-align">文字揃え</label>
                 </div>
@@ -1002,42 +1002,26 @@ function Editor() {
                   <option value="center">中央揃え</option>
                 </select>
               </div>
-              <div className="setting">
-                <div className="setting-head">
-                  <span>文字詰め</span>
-                  <output>{settings.letterSpacing} px</output>
-                </div>
-                <Slider
-                  min={-4}
-                  max={12}
-                  step={1}
-                  value={[settings.letterSpacing]}
-                  disabled={locked || composing}
-                  onValueChange={(value) =>
-                    changeSettings({
-                      letterSpacing: Array.isArray(value) ? value[0] : value,
-                    })
-                  }
-                />
-              </div>
-              <div className="setting">
-                <div className="setting-head">
-                  <span>行詰め</span>
-                  <output>{settings.lineSpacing} px</output>
-                </div>
-                <Slider
-                  min={48}
-                  max={120}
-                  step={1}
-                  value={[settings.lineSpacing]}
-                  disabled={locked || composing}
-                  onValueChange={(value) =>
-                    changeSettings({
-                      lineSpacing: Array.isArray(value) ? value[0] : value,
-                    })
-                  }
-                />
-              </div>
+              <NumericSetting
+                id="letter-spacing"
+                label="文字詰め"
+                value={settings.letterSpacing}
+                min={-4}
+                max={12}
+                unit="px"
+                disabled={locked || composing}
+                onChange={(letterSpacing) => changeSettings({ letterSpacing })}
+              />
+              <NumericSetting
+                id="line-spacing"
+                label="行詰め"
+                value={settings.lineSpacing}
+                min={48}
+                max={120}
+                unit="px"
+                disabled={locked || composing}
+                onChange={(lineSpacing) => changeSettings({ lineSpacing })}
+              />
               <div className="toggle-row">
                 <label htmlFor="invert-paper">地と文字を反転</label>
                 <Switch
@@ -1049,161 +1033,76 @@ function Editor() {
               </div>
               {settings.motion === 'eraser' && (
                 <>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <label id="fade-label" htmlFor="fade-seconds">
-                        薄くなる時間
-                      </label>
-                      <span className="number-setting">
-                        <input
-                          id="fade-seconds"
-                          type="number"
-                          min={3}
-                          max={300}
-                          step={1}
-                          value={settings.fadeSeconds}
-                          disabled={locked || composing}
-                          onChange={(event) => {
-                            const seconds = event.currentTarget.valueAsNumber;
-                            if (
-                              Number.isFinite(seconds) &&
-                              seconds >= 3 &&
-                              seconds <= 300
-                            )
-                              changeSettings({
-                                fadeSeconds: Math.round(seconds),
-                              });
-                          }}
-                          onBlur={(event) => {
-                            event.currentTarget.value = String(
-                              settings.fadeSeconds,
-                            );
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter')
-                              event.currentTarget.blur();
-                          }}
-                        />
-                        <span>秒</span>
-                      </span>
-                    </div>
-                    <Slider
-                      aria-labelledby="fade-label"
-                      min={3}
-                      max={300}
-                      step={1}
-                      value={[settings.fadeSeconds]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          fadeSeconds: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <span id="residue-label">消し跡の濃さ</span>
-                      <output>{settings.residue} %</output>
-                    </div>
-                    <Slider
-                      aria-labelledby="residue-label"
-                      min={1}
-                      max={16}
-                      step={1}
-                      value={[settings.residue]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          residue: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
+                  <NumericSetting
+                    id="fade-seconds"
+                    label="薄くなる時間"
+                    value={settings.fadeSeconds}
+                    min={3}
+                    max={300}
+                    unit="秒"
+                    disabled={locked || composing}
+                    onChange={(fadeSeconds) => changeSettings({ fadeSeconds })}
+                  />
+                  <NumericSetting
+                    id="residue"
+                    label="消し跡の濃さ"
+                    value={settings.residue}
+                    min={1}
+                    max={16}
+                    unit="%"
+                    disabled={locked || composing}
+                    onChange={(residue) => changeSettings({ residue })}
+                  />
                 </>
               )}
               {settings.motion === 'insect' && (
                 <>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <span id="insect-speed-label">速度</span>
-                      <output>{settings.insectSpeed} %</output>
-                    </div>
-                    <Slider
-                      aria-labelledby="insect-speed-label"
-                      min={20}
-                      max={220}
-                      step={1}
-                      value={[settings.insectSpeed]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          insectSpeed: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <span id="insect-wander-label">揺れ</span>
-                      <output>{settings.insectWander} %</output>
-                    </div>
-                    <Slider
-                      aria-labelledby="insect-wander-label"
-                      min={0}
-                      max={220}
-                      step={1}
-                      value={[settings.insectWander]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          insectWander: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
+                  <NumericSetting
+                    id="insect-speed"
+                    label="速度"
+                    value={settings.insectSpeed}
+                    min={20}
+                    max={220}
+                    unit="%"
+                    disabled={locked || composing}
+                    onChange={(insectSpeed) => changeSettings({ insectSpeed })}
+                  />
+                  <NumericSetting
+                    id="insect-wander"
+                    label="揺れ"
+                    value={settings.insectWander}
+                    min={0}
+                    max={220}
+                    unit="%"
+                    disabled={locked || composing}
+                    onChange={(insectWander) =>
+                      changeSettings({ insectWander })
+                    }
+                  />
                 </>
               )}
               {settings.motion === 'float' && (
                 <>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <span id="float-wind-label">風</span>
-                      <output>{settings.floatWind} %</output>
-                    </div>
-                    <Slider
-                      aria-labelledby="float-wind-label"
-                      min={0}
-                      max={220}
-                      step={1}
-                      value={[settings.floatWind]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          floatWind: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="setting">
-                    <div className="setting-head">
-                      <span id="float-lift-label">浮力</span>
-                      <output>{settings.floatLift} %</output>
-                    </div>
-                    <Slider
-                      aria-labelledby="float-lift-label"
-                      min={0}
-                      max={220}
-                      step={1}
-                      value={[settings.floatLift]}
-                      disabled={locked || composing}
-                      onValueChange={(value) =>
-                        changeSettings({
-                          floatLift: Array.isArray(value) ? value[0] : value,
-                        })
-                      }
-                    />
-                  </div>
+                  <NumericSetting
+                    id="float-wind"
+                    label="風"
+                    value={settings.floatWind}
+                    min={0}
+                    max={220}
+                    unit="%"
+                    disabled={locked || composing}
+                    onChange={(floatWind) => changeSettings({ floatWind })}
+                  />
+                  <NumericSetting
+                    id="float-lift"
+                    label="浮力"
+                    value={settings.floatLift}
+                    min={0}
+                    max={220}
+                    unit="%"
+                    disabled={locked || composing}
+                    onChange={(floatLift) => changeSettings({ floatLift })}
+                  />
                 </>
               )}
               <div className="toggle-row">

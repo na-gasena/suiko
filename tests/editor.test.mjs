@@ -182,6 +182,7 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       await sleep();
     });
     assert.ok(document.querySelector('.settings'));
+    assert.equal(document.querySelectorAll('.numeric-setting').length, 4);
     const fadeInput = document.querySelector('#fade-seconds');
     assert.equal(fadeInput.max, '300');
     await act(async () => {
@@ -196,6 +197,8 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       JSON.parse(localStorage.getItem('suiko-settings')).fadeSeconds,
       180,
     );
+    assert.equal(document.querySelector('#letter-spacing').type, 'number');
+    assert.equal(document.querySelector('#line-spacing').type, 'number');
     await act(async () => {
       const weight = document.querySelector('#font-weight');
       weight.value = '700';
