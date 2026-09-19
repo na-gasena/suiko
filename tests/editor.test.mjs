@@ -184,18 +184,23 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
     assert.ok(document.querySelector('.settings'));
     assert.equal(document.querySelectorAll('.numeric-setting').length, 4);
     const fadeInput = document.querySelector('#fade-seconds');
-    assert.equal(fadeInput.max, '300');
+    assert.equal(fadeInput.max, '3600');
     await act(async () => {
       Object.getOwnPropertyDescriptor(
         win.HTMLInputElement.prototype,
         'value',
-      ).set.call(fadeInput, '180');
+      ).set.call(fadeInput, '450');
       fadeInput.dispatchEvent(new win.InputEvent('input', { bubbles: true }));
       await sleep();
     });
     assert.equal(
       JSON.parse(localStorage.getItem('suiko-settings')).fadeSeconds,
-      180,
+      450,
+    );
+    assert.equal(
+      fadeInput.value,
+      '450',
+      'manual value can exceed slider range',
     );
     assert.equal(document.querySelector('#letter-spacing').type, 'number');
     assert.equal(document.querySelector('#line-spacing').type, 'number');

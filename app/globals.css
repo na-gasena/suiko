@@ -320,6 +320,14 @@ button:hover:not(:disabled) {
   border-bottom-color: var(--foreground);
   outline: 0;
 }
+.numeric-setting[data-outside-range='true'] .numeric-value input {
+  border-bottom-color: var(--foreground);
+}
+.numeric-setting[data-outside-range='true']
+  .numeric-slider
+  [data-slot='slider-thumb'] {
+  background: var(--foreground);
+}
 .numeric-slider {
   height: 10px;
   margin-top: -1px;

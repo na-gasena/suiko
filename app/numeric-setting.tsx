@@ -14,6 +14,8 @@ type NumericSettingProps = {
   value: number;
   min: number;
   max: number;
+  hardMin?: number;
+  hardMax?: number;
   step?: number;
   unit: string;
   disabled?: boolean;
@@ -31,6 +33,8 @@ export default function NumericSetting({
   value,
   min,
   max,
+  hardMin = min,
+  hardMax = max,
   step = 1,
   unit,
   disabled = false,
@@ -49,7 +53,7 @@ export default function NumericSetting({
     if (!editing) setDraft(format(value));
   }, [editing, value]);
 
-  const clamp = (next: number) => Math.min(max, Math.max(min, next));
+  const clamp = (next: number) => Math.min(hardMax, Math.max(hardMin, next));
   const apply = (next: number) => {
     const normalized = clamp(Math.round(next / step) * step);
     onChange(Number(normalized.toFixed(6)));
@@ -84,7 +88,10 @@ export default function NumericSetting({
   };
 
   return (
-    <div className="setting numeric-setting">
+    <div
+      className="setting numeric-setting"
+      data-outside-range={value < min || value > max || undefined}
+    >
       <div className="numeric-row">
         <label
           id={labelId}
@@ -108,8 +115,8 @@ export default function NumericSetting({
             id={id}
             type="number"
             inputMode="decimal"
-            min={min}
-            max={max}
+            min={hardMin}
+            max={hardMax}
             step={step}
             value={editing ? draft : format(value)}
             disabled={disabled}
@@ -125,8 +132,8 @@ export default function NumericSetting({
               if (
                 nextDraft !== '' &&
                 Number.isFinite(next) &&
-                next >= min &&
-                next <= max
+                next >= hardMin &&
+                next <= hardMax
               )
                 onChange(next);
             }}
@@ -148,8 +155,9 @@ export default function NumericSetting({
         min={min}
         max={max}
         step={step}
-        value={[value]}
+        value={[Math.min(max, Math.max(min, value))]}
         disabled={disabled}
+        title={`${min}〜${max}${unit}が推奨範囲`}
         onValueChange={(next) => apply(Array.isArray(next) ? next[0] : next)}
       />
       {overlay && (

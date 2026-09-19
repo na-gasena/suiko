@@ -501,25 +501,28 @@ function Editor() {
               ? stored.motion
               : defaults.motion,
           fadeSeconds: Math.max(
-            3,
-            Math.min(300, numberOr(stored.fadeSeconds, 12)),
+            0.1,
+            Math.min(3600, numberOr(stored.fadeSeconds, 12)),
           ),
-          residue: Math.max(1, Math.min(16, numberOr(stored.residue, 7))),
+          residue: Math.max(0, Math.min(42, numberOr(stored.residue, 7))),
           insectSpeed: Math.max(
-            20,
-            Math.min(220, numberOr(stored.insectSpeed, defaults.insectSpeed)),
+            0,
+            Math.min(2000, numberOr(stored.insectSpeed, defaults.insectSpeed)),
           ),
           insectWander: Math.max(
             0,
-            Math.min(220, numberOr(stored.insectWander, defaults.insectWander)),
+            Math.min(
+              2000,
+              numberOr(stored.insectWander, defaults.insectWander),
+            ),
           ),
           floatWind: Math.max(
             0,
-            Math.min(220, numberOr(stored.floatWind, defaults.floatWind)),
+            Math.min(2000, numberOr(stored.floatWind, defaults.floatWind)),
           ),
           floatLift: Math.max(
             0,
-            Math.min(220, numberOr(stored.floatLift, defaults.floatLift)),
+            Math.min(2000, numberOr(stored.floatLift, defaults.floatLift)),
           ),
           invert:
             typeof stored.invert === 'boolean'
@@ -532,9 +535,9 @@ function Editor() {
               ? stored.font
               : defaults.font,
           letterSpacing: Math.max(
-            -4,
+            -32,
             Math.min(
-              12,
+              200,
               numberOr(stored.letterSpacing, defaults.letterSpacing),
             ),
           ),
@@ -547,8 +550,8 @@ function Editor() {
               ? stored.textAlign
               : defaults.textAlign,
           lineSpacing: Math.max(
-            48,
-            Math.min(120, numberOr(stored.lineSpacing, defaults.lineSpacing)),
+            20,
+            Math.min(500, numberOr(stored.lineSpacing, defaults.lineSpacing)),
           ),
           showComposition:
             typeof stored.showComposition === 'boolean'
@@ -1008,6 +1011,8 @@ function Editor() {
                 value={settings.letterSpacing}
                 min={-4}
                 max={12}
+                hardMin={-32}
+                hardMax={200}
                 unit="px"
                 disabled={locked || composing}
                 onChange={(letterSpacing) => changeSettings({ letterSpacing })}
@@ -1018,6 +1023,8 @@ function Editor() {
                 value={settings.lineSpacing}
                 min={48}
                 max={120}
+                hardMin={20}
+                hardMax={500}
                 unit="px"
                 disabled={locked || composing}
                 onChange={(lineSpacing) => changeSettings({ lineSpacing })}
@@ -1039,6 +1046,8 @@ function Editor() {
                     value={settings.fadeSeconds}
                     min={3}
                     max={300}
+                    hardMin={0.1}
+                    hardMax={3600}
                     unit="秒"
                     disabled={locked || composing}
                     onChange={(fadeSeconds) => changeSettings({ fadeSeconds })}
@@ -1049,6 +1058,8 @@ function Editor() {
                     value={settings.residue}
                     min={1}
                     max={16}
+                    hardMin={0}
+                    hardMax={42}
                     unit="%"
                     disabled={locked || composing}
                     onChange={(residue) => changeSettings({ residue })}
@@ -1063,6 +1074,8 @@ function Editor() {
                     value={settings.insectSpeed}
                     min={20}
                     max={220}
+                    hardMin={0}
+                    hardMax={2000}
                     unit="%"
                     disabled={locked || composing}
                     onChange={(insectSpeed) => changeSettings({ insectSpeed })}
@@ -1073,6 +1086,8 @@ function Editor() {
                     value={settings.insectWander}
                     min={0}
                     max={220}
+                    hardMin={0}
+                    hardMax={2000}
                     unit="%"
                     disabled={locked || composing}
                     onChange={(insectWander) =>
@@ -1089,6 +1104,8 @@ function Editor() {
                     value={settings.floatWind}
                     min={0}
                     max={220}
+                    hardMin={0}
+                    hardMax={2000}
                     unit="%"
                     disabled={locked || composing}
                     onChange={(floatWind) => changeSettings({ floatWind })}
@@ -1099,6 +1116,8 @@ function Editor() {
                     value={settings.floatLift}
                     min={0}
                     max={220}
+                    hardMin={0}
+                    hardMax={2000}
                     unit="%"
                     disabled={locked || composing}
                     onChange={(floatLift) => changeSettings({ floatLift })}
