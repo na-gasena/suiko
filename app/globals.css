@@ -247,6 +247,28 @@ button:hover:not(:disabled) {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
 }
+.number-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.number-setting input {
+  width: 66px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: right;
+}
+.number-setting input:focus-visible {
+  outline: 1px solid var(--foreground);
+  outline-offset: 2px;
+}
 .toggle-row {
   display: flex;
   align-items: center;

@@ -502,7 +502,7 @@ function Editor() {
               : defaults.motion,
           fadeSeconds: Math.max(
             3,
-            Math.min(40, numberOr(stored.fadeSeconds, 12)),
+            Math.min(300, numberOr(stored.fadeSeconds, 12)),
           ),
           residue: Math.max(1, Math.min(16, numberOr(stored.residue, 7))),
           insectSpeed: Math.max(
@@ -1051,13 +1051,46 @@ function Editor() {
                 <>
                   <div className="setting">
                     <div className="setting-head">
-                      <span id="fade-label">薄くなる時間</span>
-                      <output>{settings.fadeSeconds} 秒</output>
+                      <label id="fade-label" htmlFor="fade-seconds">
+                        薄くなる時間
+                      </label>
+                      <span className="number-setting">
+                        <input
+                          id="fade-seconds"
+                          type="number"
+                          min={3}
+                          max={300}
+                          step={1}
+                          value={settings.fadeSeconds}
+                          disabled={locked || composing}
+                          onChange={(event) => {
+                            const seconds = event.currentTarget.valueAsNumber;
+                            if (
+                              Number.isFinite(seconds) &&
+                              seconds >= 3 &&
+                              seconds <= 300
+                            )
+                              changeSettings({
+                                fadeSeconds: Math.round(seconds),
+                              });
+                          }}
+                          onBlur={(event) => {
+                            event.currentTarget.value = String(
+                              settings.fadeSeconds,
+                            );
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter')
+                              event.currentTarget.blur();
+                          }}
+                        />
+                        <span>秒</span>
+                      </span>
                     </div>
                     <Slider
                       aria-labelledby="fade-label"
                       min={3}
-                      max={40}
+                      max={300}
                       step={1}
                       value={[settings.fadeSeconds]}
                       disabled={locked || composing}

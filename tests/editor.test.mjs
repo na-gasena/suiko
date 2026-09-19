@@ -182,6 +182,20 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       await sleep();
     });
     assert.ok(document.querySelector('.settings'));
+    const fadeInput = document.querySelector('#fade-seconds');
+    assert.equal(fadeInput.max, '300');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        win.HTMLInputElement.prototype,
+        'value',
+      ).set.call(fadeInput, '180');
+      fadeInput.dispatchEvent(new win.InputEvent('input', { bubbles: true }));
+      await sleep();
+    });
+    assert.equal(
+      JSON.parse(localStorage.getItem('suiko-settings')).fadeSeconds,
+      180,
+    );
     await act(async () => {
       const weight = document.querySelector('#font-weight');
       weight.value = '700';
