@@ -270,6 +270,11 @@ button:hover:not(:disabled) {
   min-height: 30px;
 }
 .numeric-scrub {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   align-self: stretch;
   display: flex;
   align-items: center;
@@ -914,6 +919,64 @@ body {
   border-color: var(--border);
   background: var(--secondary);
   color: var(--foreground);
+}
+.remote-panel {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 12px 42px 12px 0;
+  border-bottom: 1px solid var(--foreground);
+}
+.remote-state {
+  display: flex;
+  justify-content: space-between;
+  max-width: 760px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.remote-panel label {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 680px) 34px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.remote-panel input {
+  min-width: 0;
+  height: 31px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: inherit;
+  font:
+    11px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+.remote-panel button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.remote-panel button:hover {
+  background: var(--accent);
+}
+.remote-panel button svg {
+  width: 15px;
+  height: 15px;
+}
+.remote-close {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  font-size: 18px;
 }
 .settings {
   border-top-color: var(--foreground);

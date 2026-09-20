@@ -10,6 +10,9 @@
     "build": "vinext build",
     "build:pages": "vite build --config vite.pages.config.ts",
     "preview:pages": "vite preview --config vite.pages.config.ts",
+    "remote:dev": "wrangler dev --config wrangler.remote.jsonc --port 8787",
+    "remote:test": "node tools/test-remote-worker.mjs",
+    "remote:deploy": "wrangler deploy --config wrangler.remote.jsonc",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt"
@@ -37,7 +40,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "4.20260515.1",
+    "@cloudflare/workers-types": "^5.20260920.1",
     "@openai/sites-vite-plugin": "0.2.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
@@ -53,7 +56,7 @@
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "^4.135.0"
   },
   "type": "module"
 }

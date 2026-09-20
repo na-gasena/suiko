@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "suiko-live",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-22",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS",
+        "class_name": "SuikoRoom",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SuikoRoom"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}

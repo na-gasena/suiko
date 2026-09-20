@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  useEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -49,10 +48,6 @@ export default function NumericSetting({
   );
   const labelId = `${id}-label`;
 
-  useEffect(() => {
-    if (!editing) setDraft(format(value));
-  }, [editing, value]);
-
   const clamp = (next: number) => Math.min(hardMax, Math.max(hardMin, next));
   const apply = (next: number) => {
     const normalized = clamp(Math.round(next / step) * step);
@@ -64,14 +59,14 @@ export default function NumericSetting({
     setEditing(false);
     setDraft(format(Number.isFinite(next) ? clamp(next) : value));
   };
-  const startDrag = (event: ReactPointerEvent<HTMLLabelElement>) => {
+  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (disabled || event.button !== 0) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { x: event.clientX, value, pointerId: event.pointerId };
     setOverlay({ x: event.clientX, y: event.clientY });
   };
-  const moveDrag = (event: ReactPointerEvent<HTMLLabelElement>) => {
+  const moveDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
     const sensitivity = event.shiftKey ? 0.1 : event.altKey ? 10 : 1;
     const unitStep = step * sensitivity;
@@ -80,7 +75,7 @@ export default function NumericSetting({
     onChange(Number(clamp(next).toFixed(6)));
     setOverlay({ x: event.clientX, y: event.clientY });
   };
-  const endDrag = (event: ReactPointerEvent<HTMLLabelElement>) => {
+  const endDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
     drag.current = null;
     setOverlay(null);
@@ -93,9 +88,9 @@ export default function NumericSetting({
       data-outside-range={value < min || value > max || undefined}
     >
       <div className="numeric-row">
-        <label
+        <button
+          type="button"
           id={labelId}
-          htmlFor={id}
           className="numeric-scrub"
           onPointerDown={startDrag}
           onPointerMove={moveDrag}
@@ -108,11 +103,12 @@ export default function NumericSetting({
           title="左右にドラッグして調整"
         >
           {label}
-        </label>
+        </button>
         <span className="numeric-value">
           <input
             ref={inputRef}
             id={id}
+            aria-labelledby={labelId}
             type="number"
             inputMode="decimal"
             min={hardMin}

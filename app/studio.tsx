@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowUpRight,
+  Copy,
   Download,
+  Globe2,
   History,
   Pause,
   Play,
@@ -62,6 +64,15 @@ import Paper, { measureGlyphs } from './paper';
 import NumericSetting from './numeric-setting';
 import { measurePaperText, paperTextStyleFor } from '@/lib/paper-layout';
 import { MotionPicker } from './motion-study';
+import {
+  createRemoteAccess,
+  readRemoteAccess,
+  RemoteConnection,
+  remoteEndpoint,
+  remoteLinks,
+  type RemoteAccess,
+  type RemoteState,
+} from '@/lib/remote-sync';
 
 type Snapshot = {
   session: Session;
@@ -71,6 +82,24 @@ type Snapshot = {
   settings: Settings;
 };
 const CHANNEL = 'suiko-no-ato-live-v1';
+
+function alignRemoteClock(snapshot: Snapshot, offset: number): Snapshot {
+  const shift = (value: number | null) =>
+    typeof value === 'number' ? value + offset : value;
+  return {
+    ...snapshot,
+    session: {
+      ...snapshot.session,
+      startedAt: shift(snapshot.session.startedAt) as number,
+      activeSince: shift(snapshot.session.activeSince),
+      updatedAt: shift(snapshot.session.updatedAt) as number,
+    },
+    marks: snapshot.marks.map((mark) => ({
+      ...mark,
+      createdAt: mark.createdAt + offset,
+    })),
+  };
+}
 const historyTypes = new Set([
   'insert',
   'delete',
@@ -162,6 +191,18 @@ function Audience() {
       document.removeEventListener('keydown', keydown);
     };
   }, []);
+  useEffect(() => {
+    const access = readRemoteAccess(new URL(window.location.href));
+    const endpoint = remoteEndpoint();
+    if (!access || access.role !== 'audience' || !endpoint) return;
+    const connection = new RemoteConnection<Snapshot>({
+      endpoint,
+      access,
+      onSnapshot: (next, offset) => setSnapshot(alignRemoteClock(next, offset)),
+    });
+    connection.start();
+    return () => connection.stop();
+  }, []);
   const height = snapshot
     ? Math.max(
         620,
@@ -213,6 +254,14 @@ function Editor() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [audienceSeen, setAudienceSeen] = useState(0);
+  const [remoteAccess, setRemoteAccess] = useState<RemoteAccess | null>(null);
+  const [remoteUrls, setRemoteUrls] = useState<{
+    editor: string;
+    audience: string;
+  } | null>(null);
+  const [remoteState, setRemoteState] = useState<RemoteState | null>(null);
+  const [remoteAudiences, setRemoteAudiences] = useState(0);
+  const [remotePanelOpen, setRemotePanelOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -248,6 +297,7 @@ function Editor() {
   const allMarks = useRef(new Map<string, Mark[]>());
   const channelRef = useRef<BroadcastChannel | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
+  const remoteRef = useRef<RemoteConnection<Snapshot> | null>(null);
   const ownsLock = useRef(false);
 
   function syncSession(value: Session) {
@@ -644,6 +694,40 @@ function Editor() {
   }, []);
 
   useEffect(() => {
+    const access = readRemoteAccess(new URL(window.location.href));
+    if (access?.role === 'editor') {
+      queueMicrotask(() => {
+        setRemoteAccess(access);
+        setRemoteUrls(remoteLinks(window.location.href, access));
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!remoteAccess || remoteAccess.role !== 'editor') return;
+    const endpoint = remoteEndpoint();
+    if (!endpoint) {
+      queueMicrotask(() => setRemoteState('error'));
+      return;
+    }
+    const connection = new RemoteConnection<Snapshot>({
+      endpoint,
+      access: remoteAccess,
+      onState: setRemoteState,
+      onPresence: (audiences) => {
+        setRemoteAudiences(audiences);
+        if (audiences) setAudienceSeen(Date.now());
+      },
+    });
+    remoteRef.current = connection;
+    connection.start();
+    return () => {
+      connection.stop();
+      if (remoteRef.current === connection) remoteRef.current = null;
+    };
+  }, [remoteAccess]);
+
+  useEffect(() => {
     if (session)
       snapshotRef.current = {
         session,
@@ -657,6 +741,8 @@ function Editor() {
         type: 'snapshot',
         payload: snapshotRef.current,
       });
+    if (ownsLock.current && snapshotRef.current)
+      remoteRef.current?.sendSnapshot(snapshotRef.current);
   }, [session, draft, composing, marks, settings]);
   useEffect(() => {
     const channel = new BroadcastChannel(CHANNEL);
@@ -802,12 +888,40 @@ function Editor() {
       setArchiveBusy(false);
     }
   }
+
+  function online() {
+    if (!remoteEndpoint()) {
+      setNotice('オンライン接続先が未設定です。');
+      return;
+    }
+    const access = remoteAccess || createRemoteAccess();
+    const links = remoteLinks(window.location.href, access);
+    window.history.replaceState(null, '', links.editor);
+    setRemoteAccess(access);
+    setRemoteUrls(links);
+    setRemotePanelOpen(true);
+  }
+
+  async function copyRemoteUrl(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label}URLをコピーしました。`);
+    } catch {
+      setNotice('コピーできませんでした。URL欄からコピーしてください。');
+    }
+  }
+
   function project() {
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', 'audience');
+    const url = remoteAccess
+      ? remoteLinks(window.location.href, remoteAccess).audience
+      : (() => {
+          const local = new URL(window.location.href);
+          local.searchParams.set('view', 'audience');
+          return local.toString();
+        })();
     const opened = window.open(
-      url.toString(),
-      'suiko-audience',
+      url,
+      '_blank',
       'popup=yes,width=1280,height=800',
     );
     if (!opened) setNotice('ポップアップを許可してください。');
@@ -843,6 +957,10 @@ function Editor() {
             <Download />
             CSV出力
           </button>
+          <button className="subtle" onClick={online}>
+            <Globe2 />
+            オンライン
+          </button>
           <button className="action" onClick={project}>
             別ウィンドウ
             <ArrowUpRight />
@@ -870,6 +988,56 @@ function Editor() {
             ×
           </button>
         </div>
+      )}
+      {remotePanelOpen && remoteUrls && (
+        <section className="remote-panel" aria-label="オンラインURL">
+          <div className="remote-state">
+            <span>オンライン</span>
+            <span>
+              {remoteState === 'connected'
+                ? remoteAudiences
+                  ? `表示 ${remoteAudiences}`
+                  : '接続済み'
+                : remoteState === 'reconnecting'
+                  ? '再接続中'
+                  : remoteState === 'error'
+                    ? '接続できません'
+                    : '接続中'}
+            </span>
+          </div>
+          <label>
+            <span>編集</span>
+            <input value={remoteUrls.editor} readOnly />
+            <button
+              type="button"
+              onClick={() => copyRemoteUrl(remoteUrls.editor, '編集')}
+              aria-label="編集URLをコピー"
+              title="編集URLをコピー"
+            >
+              <Copy />
+            </button>
+          </label>
+          <label>
+            <span>表示</span>
+            <input value={remoteUrls.audience} readOnly />
+            <button
+              type="button"
+              onClick={() => copyRemoteUrl(remoteUrls.audience, '表示')}
+              aria-label="表示URLをコピー"
+              title="表示URLをコピー"
+            >
+              <Copy />
+            </button>
+          </label>
+          <button
+            type="button"
+            className="remote-close"
+            onClick={() => setRemotePanelOpen(false)}
+            aria-label="オンラインURLを閉じる"
+          >
+            ×
+          </button>
+        </section>
       )}
       <div className="workspace">
         <aside className="controls" aria-label="演者の操作">
