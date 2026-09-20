@@ -41,6 +41,15 @@ Durable Objectは最新スナップショットを接続中の全表示端末へ
 
 無料枠を守るため、送信は最大毎秒5回、保存は最大毎秒1回とする。表示端末は状態要求と接続維持以外のメッセージを送らない。Durable ObjectsはWebSocket Hibernation APIを使う。
 
+## 無料枠の見積り
+
+2026-09-20時点のWorkers Freeプランは、SQLite-backed Durable Objectsのみ利用可能。主な上限はリクエスト10万件/日、SQLite行書込10万行/日、行読込500万行/日、保存容量5GB。無料枠を超えた種類の処理は、その日のリセットまでエラーになる。
+
+受信WebSocketメッセージは20件を1リクエストとして計算し、送信WebSocketメッセージは課金対象外。現在の編集送信は最大5件/秒なので、連続1時間で約900リクエスト相当。最新版の保存は最大1回/秒、認証の利用時刻更新は最大1回/分なので、連続1時間で最大約3,660行書込となる。実際は入力していない時間に送信・保存しない。無料枠は将来変更されるため、上演前にCloudflareのAnalyticsと公式Pricingを確認する。
+
+- Pricing: https://developers.cloudflare.com/durable-objects/platform/pricing/
+- Limits: https://developers.cloudflare.com/durable-objects/platform/limits/
+
 ## URL
 
 - 編集: `/?room=<上演ID>#editor=<編集トークン>&audience=<表示トークン>`
