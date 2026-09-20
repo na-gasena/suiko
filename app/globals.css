@@ -552,6 +552,7 @@ button:hover:not(:disabled) {
 }
 .audience .paper {
   box-shadow: none;
+  border: 0;
 }
 .over-hour {
   color: #986139;

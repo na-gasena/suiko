@@ -37,6 +37,7 @@ export type Settings = {
   floatLift: number;
   invert: boolean;
   font: FontChoice;
+  fontSize: number;
   fontWeight: number;
   textAlign: 'left' | 'center';
   letterSpacing: number;
@@ -54,6 +55,7 @@ export const defaults: Settings = {
   floatLift: 100,
   invert: false,
   font: 'mincho',
+  fontSize: 34,
   fontWeight: 700,
   textAlign: 'center',
   letterSpacing: 2,

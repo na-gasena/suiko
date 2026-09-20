@@ -182,7 +182,24 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       await sleep();
     });
     assert.ok(document.querySelector('.settings'));
-    assert.equal(document.querySelectorAll('.numeric-setting').length, 4);
+    assert.equal(document.querySelectorAll('.numeric-setting').length, 5);
+    const fontSizeInput = document.querySelector('#font-size');
+    assert.equal(fontSizeInput.value, '34');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        win.HTMLInputElement.prototype,
+        'value',
+      ).set.call(fontSizeInput, '64');
+      fontSizeInput.dispatchEvent(
+        new win.InputEvent('input', { bubbles: true }),
+      );
+      await sleep();
+    });
+    assert.equal(document.querySelector('textarea').style.fontSize, '64px');
+    assert.equal(
+      JSON.parse(localStorage.getItem('suiko-settings')).fontSize,
+      64,
+    );
     const fadeInput = document.querySelector('#fade-seconds');
     assert.equal(fadeInput.max, '3600');
     await act(async () => {
@@ -257,6 +274,11 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       projection.settings.fontWeight,
       700,
       'projection receives weight',
+    );
+    assert.equal(
+      projection.settings.fontSize,
+      64,
+      'projection receives font size',
     );
     assert.equal(
       projection.settings.textAlign,

@@ -584,6 +584,10 @@ function Editor() {
             stored.font === 'mono'
               ? stored.font
               : defaults.font,
+          fontSize: Math.max(
+            8,
+            Math.min(300, numberOr(stored.fontSize, defaults.fontSize)),
+          ),
           letterSpacing: Math.max(
             -32,
             Math.min(
@@ -1134,6 +1138,18 @@ function Editor() {
                   ))}
                 </select>
               </div>
+              <NumericSetting
+                id="font-size"
+                label="文字サイズ"
+                value={settings.fontSize}
+                min={16}
+                max={96}
+                hardMin={8}
+                hardMax={300}
+                unit="px"
+                disabled={locked || composing}
+                onChange={(fontSize) => changeSettings({ fontSize })}
+              />
               <div className="setting choice-setting">
                 <div className="setting-head">
                   <label htmlFor="font-weight">文字の太さ</label>
