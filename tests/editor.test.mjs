@@ -148,6 +148,10 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
   observer.onmessage = (e) => {
     if (e.data.type === 'snapshot') projection = e.data.payload;
   };
+  localStorage.setItem(
+    'suiko-settings',
+    JSON.stringify({ lineSpacing: 20 }),
+  );
   try {
     await act(async () => {
       root.render(React.createElement(Studio));
@@ -159,6 +163,11 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       'editor boots with a writable textarea',
     );
     assert.equal(document.querySelector('textarea').disabled, false);
+    assert.equal(
+      document.querySelector('textarea').style.lineHeight,
+      '76px',
+      'a previously saved manual line spacing is ignored',
+    );
     assert.equal(document.querySelectorAll('textarea').length, 1);
     assert.ok(
       document.querySelector('.paper textarea'),
@@ -192,7 +201,7 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       document.querySelector('[aria-label="設定を閉じる"]'),
       'settings provide a visible close control for the mobile overlay',
     );
-    assert.equal(document.querySelectorAll('.numeric-setting').length, 5);
+    assert.equal(document.querySelectorAll('.numeric-setting').length, 4);
     const fontSizeInput = document.querySelector('#font-size');
     assert.equal(fontSizeInput.value, '34');
     await act(async () => {
@@ -209,6 +218,14 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
     assert.equal(
       JSON.parse(localStorage.getItem('suiko-settings')).fontSize,
       64,
+    );
+    assert.equal(
+      Object.hasOwn(
+        JSON.parse(localStorage.getItem('suiko-settings')),
+        'lineSpacing',
+      ),
+      false,
+      'obsolete line spacing is removed from saved settings',
     );
     await act(async () => {
       Object.getOwnPropertyDescriptor(
@@ -262,7 +279,7 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       'manual value can exceed slider range',
     );
     assert.equal(document.querySelector('#letter-spacing').type, 'number');
-    assert.equal(document.querySelector('#line-spacing').type, 'number');
+    assert.equal(document.querySelector('#line-spacing'), null);
     await act(async () => {
       const weight = document.querySelector('#font-weight');
       weight.value = '700';

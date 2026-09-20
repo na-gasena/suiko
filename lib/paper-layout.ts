@@ -37,10 +37,7 @@ export function paperFont(settings: Pick<Settings, 'font'> = defaults) {
 
 export function paperLineHeight(settings: Settings = defaults) {
   const fontSize = settings.fontSize ?? defaults.fontSize;
-  return Math.max(
-    settings.lineSpacing ?? defaults.lineSpacing,
-    Math.ceil((fontSize * 112) / 100),
-  );
+  return Math.max(LINE_HEIGHT, Math.ceil((fontSize * 112) / 100));
 }
 
 export function paperTextStyleFor(
@@ -98,7 +95,7 @@ export function measurePaperText(
   text: string,
   settings: Settings = defaults,
 ): PaperLayout {
-  const key = `${text}\u0000${settings.font}\u0000${settings.fontSize}\u0000${settings.letterSpacing}\u0000${settings.lineSpacing}\u0000${settings.fontWeight}\u0000${settings.textAlign}`;
+  const key = `${text}\u0000${settings.font}\u0000${settings.fontSize}\u0000${settings.letterSpacing}\u0000${settings.fontWeight}\u0000${settings.textAlign}`;
   const cached = cache.get(key);
   if (cached) return cached;
   const context = document.createElement('canvas').getContext('2d')!;

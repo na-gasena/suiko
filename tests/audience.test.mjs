@@ -91,7 +91,6 @@ test('projection stays text-only before connection, while writing and during bre
       fontWeight: 700,
       textAlign: 'center',
       letterSpacing: 2,
-      lineSpacing: 76,
       showComposition: true,
       retainComposition: false,
     },

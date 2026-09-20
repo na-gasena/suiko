@@ -656,10 +656,6 @@ function Editor() {
             stored.textAlign === 'left' || stored.textAlign === 'center'
               ? stored.textAlign
               : defaults.textAlign,
-          lineSpacing: Math.max(
-            20,
-            Math.min(500, numberOr(stored.lineSpacing, defaults.lineSpacing)),
-          ),
           showComposition:
             typeof stored.showComposition === 'boolean'
               ? stored.showComposition
@@ -1319,18 +1315,6 @@ function Editor() {
                 unit="px"
                 disabled={editingBlocked || composing}
                 onChange={(letterSpacing) => changeSettings({ letterSpacing })}
-              />
-              <NumericSetting
-                id="line-spacing"
-                label="行詰め"
-                value={settings.lineSpacing}
-                min={48}
-                max={120}
-                hardMin={20}
-                hardMax={500}
-                unit="px"
-                disabled={editingBlocked || composing}
-                onChange={(lineSpacing) => changeSettings({ lineSpacing })}
               />
               <div className="toggle-row">
                 <label htmlFor="invert-paper">地と文字を反転</label>

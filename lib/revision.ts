@@ -41,7 +41,6 @@ export type Settings = {
   fontWeight: number;
   textAlign: 'left' | 'center';
   letterSpacing: number;
-  lineSpacing: number;
   showComposition: boolean;
   retainComposition: boolean;
 };
@@ -59,7 +58,6 @@ export const defaults: Settings = {
   fontWeight: 700,
   textAlign: 'center',
   letterSpacing: 2,
-  lineSpacing: 76,
   showComposition: true,
   retainComposition: false,
 };
