@@ -281,6 +281,11 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       'projection receives the live full text',
     );
     assert.equal(
+      projection.selectionEnd,
+      2,
+      'projection receives the active editing position',
+    );
+    assert.equal(
       projection.settings.fontWeight,
       700,
       'projection receives weight',
@@ -348,7 +353,10 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       'center',
       'alignment restores',
     );
-    await act(async () => document.querySelector('textarea').focus());
+    await act(async () => {
+      document.querySelector('textarea').focus();
+      await sleep();
+    });
     assert.equal(
       (await read('sessions'))[0].phase,
       'break',

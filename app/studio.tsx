@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   Copy,
@@ -45,6 +45,8 @@ import {
   eventRow,
   fontChoices,
   newSession,
+  PAPER_HEIGHT,
+  PAPER_WIDTH,
   timeLabel,
   toCsv,
   type Mark,
@@ -78,6 +80,7 @@ import {
 type Snapshot = {
   session: Session;
   text: string;
+  selectionEnd?: number;
   composing: boolean;
   marks: Mark[];
   settings: Settings;
@@ -148,6 +151,8 @@ export default function Studio() {
 
 function Audience() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const audienceRef = useRef<HTMLElement>(null);
+  const audiencePaperRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const channel = new BroadcastChannel(CHANNEL);
     channel.onmessage = (e) => {
@@ -204,27 +209,66 @@ function Audience() {
     connection.start();
     return () => connection.stop();
   }, []);
+  const visibleText = snapshot
+    ? snapshot.composing && !snapshot.settings.showComposition
+      ? snapshot.session.text
+      : snapshot.text
+    : '';
+  const layout = snapshot
+    ? measurePaperText(visibleText, snapshot.settings)
+    : null;
   const height = snapshot
     ? Math.max(
-        620,
-        measurePaperText(
-          snapshot.composing && !snapshot.settings.showComposition
-            ? snapshot.session.text
-            : snapshot.text,
-          snapshot.settings,
-        ).height,
+        PAPER_HEIGHT,
+        layout?.height || PAPER_HEIGHT,
         ...snapshot.marks.map((m) => m.y + 150),
       )
-    : 620;
+    : PAPER_HEIGHT;
+  useLayoutEffect(() => {
+    const audience = audienceRef.current;
+    const paper = audiencePaperRef.current;
+    if (!snapshot || !layout || !audience || !paper) return;
+    const frame = requestAnimationFrame(() => {
+      if (typeof audience.scrollTo !== 'function') return;
+      if (audience.scrollHeight <= audience.clientHeight + 1) {
+        if (audience.scrollTop)
+          audience.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      const selectionEnd = Math.max(
+        0,
+        Math.min(
+          snapshot.selectionEnd ?? visibleText.length,
+          visibleText.length,
+        ),
+      );
+      const activeGlyph =
+        selectionEnd >= visibleText.length
+          ? undefined
+          : layout.glyphs.find((glyph) => glyph.start >= selectionEnd) ||
+            [...layout.glyphs]
+              .reverse()
+              .find((glyph) => glyph.end <= selectionEnd);
+      const activeY = activeGlyph?.y ?? Math.max(192, layout.height - 150);
+      const scale = paper.getBoundingClientRect().width / PAPER_WIDTH || 1;
+      const top = Math.max(
+        0,
+        Math.min(
+          paper.offsetTop + activeY * scale - audience.clientHeight * 0.68,
+          audience.scrollHeight - audience.clientHeight,
+        ),
+      );
+      audience.scrollTo({ top, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [height, layout, snapshot, visibleText]);
   return (
     <main
+      ref={audienceRef}
       className={`audience${snapshot?.settings.invert ? ' audience-inverted' : ''}`}
       aria-label="投影画面。ダブルクリックまたはFキーで全画面表示を切り替えます。"
     >
-      <div
-        className="audience-paper"
-        style={{ '--paper-height': height } as CSSProperties}
-      >
+      <div className="audience-paper" ref={audiencePaperRef}>
         {snapshot && (
           <Paper
             text={snapshot.text}
@@ -246,6 +290,7 @@ function Audience() {
 function Editor() {
   const [session, setSession] = useState<Session | null>(null);
   const [draft, setDraft] = useState('');
+  const [selectionEnd, setSelectionEnd] = useState(0);
   const [marks, setMarks] = useState<Mark[]>([]);
   const [settings, setSettings] = useState<Settings>(defaults);
   const [composing, setComposing] = useState(false);
@@ -520,6 +565,7 @@ function Editor() {
     );
     syncSession(next);
     syncDraft('');
+    setSelectionEnd(0);
     syncMarks([]);
     setRecent([]);
     persist(next);
@@ -639,6 +685,7 @@ function Editor() {
         if (!alive) return;
         syncSession(current);
         syncDraft(current.text);
+        setSelectionEnd(current.text.length);
         syncMarks(savedMarks);
         setRecent(historyChanges(events).slice(-6).reverse());
         setSaveState('保存済み');
@@ -748,6 +795,7 @@ function Editor() {
       snapshotRef.current = {
         session,
         text: draft,
+        selectionEnd,
         composing,
         marks,
         settings,
@@ -759,7 +807,7 @@ function Editor() {
       });
     if (ownsLock.current && snapshotRef.current)
       remoteRef.current?.sendSnapshot(snapshotRef.current);
-  }, [session, draft, composing, marks, settings]);
+  }, [session, draft, selectionEnd, composing, marks, settings]);
   useEffect(() => {
     const channel = new BroadcastChannel(CHANNEL);
     channelRef.current = channel;
@@ -1447,11 +1495,15 @@ function Editor() {
               spellCheck={false}
               onChange={(e) => {
                 const value = e.currentTarget.value;
+                setSelectionEnd(e.currentTarget.selectionEnd ?? value.length);
                 const native = e.nativeEvent as InputEvent;
                 if (composingRef.current)
                   updateComposition(value, compositionRef.current.data);
                 else commit(value, native.inputType);
               }}
+              onSelect={(e) =>
+                setSelectionEnd(e.currentTarget.selectionEnd ?? draft.length)
+              }
               onCompositionStart={() => {
                 begin();
                 composingRef.current = true;
@@ -1484,6 +1536,7 @@ function Editor() {
               }}
               onCompositionEnd={(e) => {
                 const value = e.currentTarget.value;
+                setSelectionEnd(e.currentTarget.selectionEnd ?? value.length);
                 const c = compositionRef.current;
                 updateComposition(value, e.data);
                 record('composition_end', c.last, value, [], e.data, c.id);

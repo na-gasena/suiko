@@ -78,8 +78,20 @@ test('projection stays text-only before connection, while writing and during bre
       },
     ],
     settings: {
+      motion: 'eraser',
       fadeSeconds: 12,
       residue: 7,
+      insectSpeed: 100,
+      insectWander: 100,
+      floatWind: 100,
+      floatLift: 100,
+      invert: false,
+      font: 'mincho',
+      fontSize: 34,
+      fontWeight: 700,
+      textAlign: 'center',
+      letterSpacing: 2,
+      lineSpacing: 76,
       showComposition: true,
       retainComposition: false,
     },
@@ -118,6 +130,34 @@ test('projection stays text-only before connection, while writing and during bre
     assert.ok(
       messages.includes('audience_ready'),
       'connection status goes to the editor',
+    );
+    const audience = document.querySelector('.audience');
+    const paper = document.querySelector('.audience-paper');
+    const scrolls = [];
+    Object.defineProperties(audience, {
+      clientHeight: { configurable: true, value: 620 },
+      scrollHeight: { configurable: true, value: 8000 },
+      scrollTop: { configurable: true, value: 0, writable: true },
+    });
+    Object.defineProperty(paper, 'offsetTop', {
+      configurable: true,
+      value: 0,
+    });
+    paper.getBoundingClientRect = () => ({ width: 960 });
+    audience.scrollTo = ({ top }) => {
+      audience.scrollTop = top;
+      scrolls.push(top);
+    };
+    const longText = '雨'.repeat(2000);
+    await send({
+      ...snapshot,
+      text: longText,
+      selectionEnd: longText.length,
+      session: { ...snapshot.session, text: longText },
+    });
+    assert.ok(
+      scrolls.some((top) => top > 0),
+      'long projection follows the active end without shrinking the paper',
     );
     await send({
       ...snapshot,

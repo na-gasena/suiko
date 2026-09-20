@@ -537,18 +537,27 @@ button:hover:not(:disabled) {
 .audience {
   height: 100dvh;
   background: #fffefb;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   padding: 0;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
   cursor: none;
+}
+.audience::-webkit-scrollbar {
+  display: none;
 }
 .audience-inverted {
   background: #171717;
 }
 .audience .audience-paper {
-  width: min(100%, calc(100dvh * 960 / var(--paper-height, 620)));
+  flex: 0 0 auto;
+  width: min(100%, calc(100dvh * 960 / 620));
+  margin-block: auto;
 }
 .audience .paper {
   box-shadow: none;
