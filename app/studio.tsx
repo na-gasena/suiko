@@ -11,6 +11,7 @@ import {
   Play,
   Plus,
   Settings2,
+  X,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -299,6 +300,13 @@ function Editor() {
   const snapshotRef = useRef<Snapshot | null>(null);
   const remoteRef = useRef<RemoteConnection<Snapshot> | null>(null);
   const ownsLock = useRef(false);
+  const lockReleaseRef = useRef<(() => void) | null>(null);
+  const windowId = useRef(crypto.randomUUID());
+  const editingConflict = locked || remoteState === 'conflict';
+  const editingBlocked =
+    editingConflict ||
+    (Boolean(remoteAccess) &&
+      (remoteState === null || remoteState === 'connecting'));
 
   function syncSession(value: Session) {
     sessionRef.current = value;
@@ -534,8 +542,7 @@ function Editor() {
   }
 
   useEffect(() => {
-    let alive = true,
-      release: (() => void) | undefined;
+    let alive = true;
     const start = async (owner: boolean) => {
       ownsLock.current = owner;
       setLocked(!owner);
@@ -658,15 +665,19 @@ function Editor() {
             return;
           }
           const hold = new Promise<void>((resolve) => {
-            release = resolve;
+            lockReleaseRef.current = resolve;
           });
           await start(true);
           if (alive) await hold;
         })
-        .catch(() => {
+        .catch((reason: unknown) => {
           if (alive) {
-            setError('編集画面の起動に失敗しました。再読み込みしてください。');
+            ownsLock.current = false;
             setLocked(true);
+            if ((reason as { name?: string })?.name !== 'AbortError')
+              setError(
+                '編集画面の起動に失敗しました。再読み込みしてください。',
+              );
           }
         });
     } else {
@@ -691,7 +702,8 @@ function Editor() {
     return () => {
       alive = false;
       ownsLock.current = false;
-      release?.();
+      lockReleaseRef.current?.();
+      lockReleaseRef.current = null;
       clearInterval(tick);
       window.removeEventListener('beforeunload', beforeUnload);
     };
@@ -752,6 +764,16 @@ function Editor() {
     const channel = new BroadcastChannel(CHANNEL);
     channelRef.current = channel;
     channel.onmessage = (e) => {
+      if (
+        e.data.type === 'editor_takeover' &&
+        e.data.owner !== windowId.current
+      ) {
+        ownsLock.current = false;
+        setLocked(true);
+        lockReleaseRef.current?.();
+        lockReleaseRef.current = null;
+        return;
+      }
       if (!ownsLock.current) return;
       if (e.data.type === 'audience_ready') setAudienceSeen(Date.now());
       if (e.data.type === 'audience_fullscreen_error')
@@ -834,7 +856,8 @@ function Editor() {
     }
   }
   async function deleteArchive(id: string) {
-    if (locked || composingRef.current || archiveBusyRef.current) return;
+    if (editingBlocked || composingRef.current || archiveBusyRef.current)
+      return;
     archiveBusyRef.current = true;
     setArchiveBusy(true);
     try {
@@ -873,7 +896,7 @@ function Editor() {
   }
   async function undoArchiveDelete() {
     const backup = deletedSessions.at(-1);
-    if (!backup || locked || archiveBusyRef.current) return;
+    if (!backup || editingBlocked || archiveBusyRef.current) return;
     archiveBusyRef.current = true;
     setArchiveBusy(true);
     try {
@@ -904,6 +927,42 @@ function Editor() {
     setRemoteAccess(access);
     setRemoteUrls(links);
     setRemotePanelOpen(true);
+  }
+
+  function resetConflict() {
+    channelRef.current?.postMessage({
+      type: 'editor_takeover',
+      owner: windowId.current,
+    });
+    remoteRef.current?.takeOver();
+    if (ownsLock.current) {
+      setLocked(false);
+      setNotice('この画面に編集を移しました。');
+      return;
+    }
+    if (!navigator.locks) {
+      ownsLock.current = true;
+      setLocked(false);
+      setNotice('この画面に編集を移しました。');
+      return;
+    }
+    void navigator.locks
+      .request('suiko-editor-owner', { steal: true }, async (lock) => {
+        if (!lock) return;
+        ownsLock.current = true;
+        setLocked(false);
+        setNotice('この画面に編集を移しました。');
+        const hold = new Promise<void>((resolve) => {
+          lockReleaseRef.current = resolve;
+        });
+        await hold;
+      })
+      .catch((reason: unknown) => {
+        ownsLock.current = false;
+        setLocked(true);
+        if ((reason as { name?: string })?.name !== 'AbortError')
+          setError('編集の競合をリセットできませんでした。');
+      });
   }
 
   async function copyRemoteUrl(value: string, label: string) {
@@ -971,9 +1030,9 @@ function Editor() {
           </button>
         </div>
       </header>
-      {locked && (
+      {editingConflict && (
         <div className="error" role="alert">
-          別の編集画面が開いています。ここは閲覧のみです。編集を移す場合は、先の画面を閉じて再読み込みしてください。
+          別の編集画面が使用中です。ここでは編集できません。編集を移す場合は、設定の「競合リセット」を押してください。
         </div>
       )}
       {error && (
@@ -1004,9 +1063,11 @@ function Editor() {
                   : '接続済み'
                 : remoteState === 'reconnecting'
                   ? '再接続中'
-                  : remoteState === 'error'
-                    ? '接続できません'
-                    : '接続中'}
+                  : remoteState === 'conflict'
+                    ? '編集不可'
+                    : remoteState === 'error'
+                      ? '接続できません'
+                      : '接続中'}
             </span>
           </div>
           <label>
@@ -1060,7 +1121,7 @@ function Editor() {
               <button
                 className="action"
                 onClick={breakOrResume}
-                disabled={locked || composing}
+                disabled={editingBlocked || composing}
                 aria-label={
                   session.phase === 'writing'
                     ? '一時停止'
@@ -1082,7 +1143,7 @@ function Editor() {
                 className="subtle"
                 onClick={() => setConfirmNext(true)}
                 disabled={
-                  locked ||
+                  editingBlocked ||
                   composing ||
                   (session.phase === 'ready' && !session.text)
                 }
@@ -1103,8 +1164,18 @@ function Editor() {
           </section>
           {settingsOpen && (
             <section className="settings">
-              <div className="section-label">
-                <span>紙面の設定</span>
+              <div className="settings-heading">
+                <div className="section-label">
+                  <span>紙面の設定</span>
+                </div>
+                <button
+                  type="button"
+                  className="subtle settings-close"
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label="設定を閉じる"
+                >
+                  <X />
+                </button>
               </div>
               <div className="setting choice-setting">
                 <div className="setting-head">
@@ -1113,7 +1184,7 @@ function Editor() {
                 <MotionPicker
                   value={settings.motion}
                   onChange={(motion) => changeSettings({ motion })}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                 />
               </div>
               <div className="setting choice-setting">
@@ -1124,7 +1195,7 @@ function Editor() {
                   id="font-choice"
                   className="font-select"
                   value={settings.font}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onChange={(event) =>
                     changeSettings({
                       font: event.currentTarget.value as Settings['font'],
@@ -1147,7 +1218,7 @@ function Editor() {
                 hardMin={8}
                 hardMax={300}
                 unit="px"
-                disabled={locked || composing}
+                disabled={editingBlocked || composing}
                 onChange={(fontSize) => changeSettings({ fontSize })}
               />
               <div className="setting choice-setting">
@@ -1158,7 +1229,7 @@ function Editor() {
                   id="font-weight"
                   className="font-select"
                   value={settings.fontWeight}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onChange={(event) =>
                     changeSettings({
                       fontWeight: Number(event.currentTarget.value),
@@ -1177,7 +1248,7 @@ function Editor() {
                   id="text-align"
                   className="font-select"
                   value={settings.textAlign}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onChange={(event) =>
                     changeSettings({
                       textAlign: event.currentTarget
@@ -1198,7 +1269,7 @@ function Editor() {
                 hardMin={-32}
                 hardMax={200}
                 unit="px"
-                disabled={locked || composing}
+                disabled={editingBlocked || composing}
                 onChange={(letterSpacing) => changeSettings({ letterSpacing })}
               />
               <NumericSetting
@@ -1210,7 +1281,7 @@ function Editor() {
                 hardMin={20}
                 hardMax={500}
                 unit="px"
-                disabled={locked || composing}
+                disabled={editingBlocked || composing}
                 onChange={(lineSpacing) => changeSettings({ lineSpacing })}
               />
               <div className="toggle-row">
@@ -1218,7 +1289,7 @@ function Editor() {
                 <Switch
                   id="invert-paper"
                   checked={settings.invert}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onCheckedChange={(value) => changeSettings({ invert: value })}
                 />
               </div>
@@ -1233,7 +1304,7 @@ function Editor() {
                     hardMin={0.1}
                     hardMax={3600}
                     unit="秒"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(fadeSeconds) => changeSettings({ fadeSeconds })}
                   />
                   <NumericSetting
@@ -1245,7 +1316,7 @@ function Editor() {
                     hardMin={0}
                     hardMax={42}
                     unit="%"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(residue) => changeSettings({ residue })}
                   />
                 </>
@@ -1261,7 +1332,7 @@ function Editor() {
                     hardMin={0}
                     hardMax={2000}
                     unit="%"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(insectSpeed) => changeSettings({ insectSpeed })}
                   />
                   <NumericSetting
@@ -1273,7 +1344,7 @@ function Editor() {
                     hardMin={0}
                     hardMax={2000}
                     unit="%"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(insectWander) =>
                       changeSettings({ insectWander })
                     }
@@ -1291,7 +1362,7 @@ function Editor() {
                     hardMin={0}
                     hardMax={2000}
                     unit="%"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(floatWind) => changeSettings({ floatWind })}
                   />
                   <NumericSetting
@@ -1303,7 +1374,7 @@ function Editor() {
                     hardMin={0}
                     hardMax={2000}
                     unit="%"
-                    disabled={locked || composing}
+                    disabled={editingBlocked || composing}
                     onChange={(floatLift) => changeSettings({ floatLift })}
                   />
                 </>
@@ -1313,7 +1384,7 @@ function Editor() {
                 <Switch
                   id="show-ime"
                   checked={settings.showComposition}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onCheckedChange={(value) =>
                     changeSettings({ showComposition: value })
                   }
@@ -1324,11 +1395,23 @@ function Editor() {
                 <Switch
                   id="retain-ime"
                   checked={settings.retainComposition}
-                  disabled={locked || composing}
+                  disabled={editingBlocked || composing}
                   onCheckedChange={(value) =>
                     changeSettings({ retainComposition: value })
                   }
                 />
+              </div>
+              <div className="setting conflict-reset-setting">
+                <div className="setting-head">
+                  <span>編集の競合</span>
+                </div>
+                <button
+                  type="button"
+                  className="subtle conflict-reset"
+                  onClick={resetConflict}
+                >
+                  競合リセット
+                </button>
               </div>
             </section>
           )}
@@ -1360,7 +1443,7 @@ function Editor() {
               value={draft}
               placeholder="ここに入力"
               maxLength={2000}
-              disabled={locked}
+              disabled={editingBlocked}
               spellCheck={false}
               onChange={(e) => {
                 const value = e.currentTarget.value;
@@ -1492,7 +1575,7 @@ function Editor() {
                     className="archive-close"
                     aria-label={`${String(s.number).padStart(2, '0')}を削除`}
                     title="削除"
-                    disabled={locked || composing || archiveBusy}
+                    disabled={editingBlocked || composing || archiveBusy}
                     onClick={() => deleteArchive(s.id)}
                   >
                     ×
@@ -1511,7 +1594,7 @@ function Editor() {
                 </output>
                 <button
                   className="subtle"
-                  disabled={locked || archiveBusy}
+                  disabled={editingBlocked || archiveBusy}
                   onClick={undoArchiveDelete}
                 >
                   削除を取り消す

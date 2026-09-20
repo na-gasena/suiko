@@ -182,6 +182,16 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       await sleep();
     });
     assert.ok(document.querySelector('.settings'));
+    assert.ok(
+      [...document.querySelectorAll('button')].some(
+        (button) => button.textContent.trim() === '競合リセット',
+      ),
+      'settings expose an explicit editor takeover control',
+    );
+    assert.ok(
+      document.querySelector('[aria-label="設定を閉じる"]'),
+      'settings provide a visible close control for the mobile overlay',
+    );
     assert.equal(document.querySelectorAll('.numeric-setting').length, 5);
     const fontSizeInput = document.querySelector('#font-size');
     assert.equal(fontSizeInput.value, '34');

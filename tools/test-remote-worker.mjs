@@ -24,6 +24,9 @@ function connect(role) {
     socket.addEventListener('open', resolve, { once: true });
     socket.addEventListener('error', reject, { once: true });
   });
+  const closed = new Promise((resolve) => {
+    socket.addEventListener('close', resolve, { once: true });
+  });
   const next = (type) => {
     const index = messages.findIndex((message) => message.type === type);
     if (index >= 0) return Promise.resolve(messages.splice(index, 1)[0]);
@@ -37,7 +40,7 @@ function connect(role) {
       }, 5000);
     });
   };
-  return { socket, opened, next };
+  return { socket, opened, closed, next };
 }
 
 const editor = connect('editor');
@@ -50,6 +53,19 @@ editor.socket.send(
   }),
 );
 await editor.next('authenticated');
+
+const competingEditor = connect('editor');
+await competingEditor.opened;
+competingEditor.socket.send(
+  JSON.stringify({
+    type: 'auth',
+    token: editorToken,
+    audienceToken,
+  }),
+);
+await competingEditor.next('editor_conflict');
+const conflictClose = await competingEditor.closed;
+assert.equal(conflictClose.code, 4009);
 
 const audience = connect('audience');
 await audience.opened;
@@ -73,6 +89,31 @@ const delivered = await audience.next('snapshot');
 assert.deepEqual(delivered.snapshot, expected);
 assert.equal(typeof delivered.serverTime, 'number');
 
-editor.socket.close();
+const replacementEditor = connect('editor');
+await replacementEditor.opened;
+replacementEditor.socket.send(
+  JSON.stringify({
+    type: 'auth',
+    token: editorToken,
+    audienceToken,
+    takeover: true,
+  }),
+);
+await replacementEditor.next('authenticated');
+const replacedClose = await editor.closed;
+assert.equal(replacedClose.code, 4001);
+
+const replaced = { text: 'この画面だけで編集', revision: 2 };
+replacementEditor.socket.send(
+  JSON.stringify({
+    type: 'snapshot',
+    editorTime: Date.now(),
+    snapshot: replaced,
+  }),
+);
+const replacementDelivered = await audience.next('snapshot');
+assert.deepEqual(replacementDelivered.snapshot, replaced);
+
+replacementEditor.socket.close();
 audience.socket.close();
-console.log('Remote Worker WebSocket test passed.');
+console.log('Remote Worker single-editor and takeover test passed.');

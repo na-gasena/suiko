@@ -5,7 +5,12 @@ export type RemoteAccess = {
   token: string;
   audienceToken?: string;
 };
-export type RemoteState = 'connecting' | 'connected' | 'reconnecting' | 'error';
+export type RemoteState =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'conflict'
+  | 'error';
 
 const bytes = (length: number) => {
   const value = new Uint8Array(length);
@@ -84,6 +89,7 @@ export class RemoteConnection<T> {
   private retryTimer = 0;
   private sendTimer = 0;
   private latest: T | null = null;
+  private takeover = false;
 
   constructor(options: ConnectionOptions<T>) {
     this.options = options;
@@ -108,6 +114,20 @@ export class RemoteConnection<T> {
     this.sendTimer = window.setTimeout(() => this.flush(), 200);
   }
 
+  takeOver() {
+    if (this.options.access.role !== 'editor') return;
+    this.takeover = true;
+    this.stopped = false;
+    this.retry = 0;
+    clearTimeout(this.retryTimer);
+    clearTimeout(this.sendTimer);
+    const previous = this.socket;
+    this.socket = null;
+    this.authenticated = false;
+    previous?.close(1000, 'editor_takeover');
+    this.connect();
+  }
+
   private connect() {
     if (this.stopped) return;
     this.authenticated = false;
@@ -119,15 +139,18 @@ export class RemoteConnection<T> {
     const socket = new WebSocket(url);
     this.socket = socket;
     socket.addEventListener('open', () => {
+      if (this.socket !== socket) return;
       socket.send(
         JSON.stringify({
           type: 'auth',
           token: this.options.access.token,
           audienceToken: this.options.access.audienceToken,
+          ...(this.takeover ? { takeover: true } : {}),
         }),
       );
     });
     socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
       if (event.data === 'pong') return;
       let message: Record<string, unknown>;
       try {
@@ -137,9 +160,15 @@ export class RemoteConnection<T> {
       }
       if (message.type === 'authenticated') {
         this.authenticated = true;
+        this.takeover = false;
         this.retry = 0;
         this.options.onState?.('connected');
         this.flush();
+      }
+      if (message.type === 'editor_conflict') {
+        this.authenticated = false;
+        this.options.onState?.('conflict');
+        socket.close(4009, 'editor_conflict');
       }
       if (message.type === 'snapshot' && message.snapshot) {
         const serverTime = Number(message.serverTime) || Date.now();
@@ -155,6 +184,11 @@ export class RemoteConnection<T> {
     socket.addEventListener('close', (event) => {
       if (this.socket === socket) this.socket = null;
       if (this.stopped || event.code === 1000) return;
+      if (event.code === 4001 || event.code === 4009) {
+        this.authenticated = false;
+        this.options.onState?.('conflict');
+        return;
+      }
       if (event.code === 1008) {
         this.options.onState?.('error');
         return;

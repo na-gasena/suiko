@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createRemoteAccess,
   readRemoteAccess,
+  RemoteConnection,
   remoteLinks,
 } from '../lib/remote-sync.ts';
 
@@ -44,4 +45,74 @@ test('room identifiers are validated before a remote connection is allowed', () 
     readRemoteAccess(new URL('https://example.test/?room=short#editor=secret')),
     null,
   );
+});
+
+test('remote editor stays blocked on conflict until this window takes over', () => {
+  const originalWindow = globalThis.window;
+  const originalWebSocket = globalThis.WebSocket;
+  const sockets = [];
+  class FakeWebSocket {
+    static OPEN = 1;
+    readyState = 0;
+    sent = [];
+    listeners = new Map();
+    constructor(url) {
+      this.url = url;
+      sockets.push(this);
+    }
+    addEventListener(type, listener) {
+      const listeners = this.listeners.get(type) || [];
+      listeners.push(listener);
+      this.listeners.set(type, listeners);
+    }
+    emit(type, event = {}) {
+      for (const listener of this.listeners.get(type) || []) listener(event);
+    }
+    send(value) {
+      this.sent.push(JSON.parse(value));
+    }
+    close(code = 1000, reason = '') {
+      this.readyState = 3;
+      this.emit('close', { code, reason });
+    }
+    open() {
+      this.readyState = FakeWebSocket.OPEN;
+      this.emit('open');
+    }
+    message(value) {
+      this.emit('message', { data: JSON.stringify(value) });
+    }
+  }
+  globalThis.window = { setTimeout, clearTimeout };
+  globalThis.WebSocket = FakeWebSocket;
+  try {
+    const states = [];
+    const connection = new RemoteConnection({
+      endpoint: 'wss://worker.example',
+      access: {
+        roomId: 'abcdefghijklmnopqrst',
+        role: 'editor',
+        token: 'e'.repeat(43),
+        audienceToken: 'a'.repeat(43),
+      },
+      onState: (state) => states.push(state),
+    });
+    connection.start();
+    sockets[0].open();
+    assert.equal(sockets[0].sent[0].takeover, undefined);
+    sockets[0].message({ type: 'editor_conflict' });
+    assert.equal(states.at(-1), 'conflict');
+    assert.equal(sockets.length, 1, 'conflict does not reconnect in a loop');
+
+    connection.takeOver();
+    assert.equal(sockets.length, 2);
+    sockets[1].open();
+    assert.equal(sockets[1].sent[0].takeover, true);
+    sockets[1].message({ type: 'authenticated' });
+    assert.equal(states.at(-1), 'connected');
+    connection.stop();
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.WebSocket = originalWebSocket;
+  }
 });

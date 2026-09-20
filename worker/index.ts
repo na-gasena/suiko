@@ -47,6 +47,14 @@ async function digest(value: string) {
     .join('');
 }
 
+function sendIfOpen(socket: WebSocket, payload: string) {
+  try {
+    if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+  } catch {
+    // A closing hibernatable socket can remain in getWebSockets briefly.
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
@@ -83,7 +91,7 @@ export class SuikoRoom extends DurableObject<Env> {
     const attachment: Attachment = { role, authenticated: false };
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server, [role]);
-    server.send(JSON.stringify({ type: 'auth_required' }));
+    sendIfOpen(server, JSON.stringify({ type: 'auth_required' }));
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -165,16 +173,30 @@ export class SuikoRoom extends DurableObject<Env> {
       socket.close(1008, 'forbidden');
       return;
     }
-    attachment.authenticated = true;
     if (attachment.role === 'editor') {
-      for (const editor of this.ctx.getWebSockets('editor')) {
-        if (editor === socket) continue;
-        const current = editor.deserializeAttachment() as Attachment;
-        if (current.authenticated) editor.close(4001, 'editor_replaced');
+      const activeEditors = this.ctx
+        .getWebSockets('editor')
+        .filter((editor) => {
+          if (editor === socket) return false;
+          const current = editor.deserializeAttachment() as Attachment;
+          return current.authenticated && editor.readyState === WebSocket.OPEN;
+        });
+      if (activeEditors.length && message.takeover !== true) {
+        sendIfOpen(
+          socket,
+          JSON.stringify({ type: 'editor_conflict', serverTime: now }),
+        );
+        socket.close(4009, 'editor_conflict');
+        return;
       }
+      if (message.takeover === true)
+        for (const editor of activeEditors)
+          editor.close(4001, 'editor_replaced');
     }
+    attachment.authenticated = true;
     socket.serializeAttachment(attachment);
-    socket.send(
+    sendIfOpen(
+      socket,
       JSON.stringify({
         type: 'authenticated',
         role: attachment.role,
@@ -204,9 +226,10 @@ export class SuikoRoom extends DurableObject<Env> {
     const payload = JSON.stringify({ type: 'snapshot', ...latest });
     for (const socket of this.ctx.getWebSockets('audience')) {
       const info = socket.deserializeAttachment() as Attachment;
-      if (info.authenticated) socket.send(payload);
+      if (info.authenticated) sendIfOpen(socket, payload);
     }
-    editor.send(
+    sendIfOpen(
+      editor,
       JSON.stringify({
         type: 'ack',
         revision: latest.revision,
@@ -219,7 +242,8 @@ export class SuikoRoom extends DurableObject<Env> {
     const latest =
       this.latest || (await this.ctx.storage.get<LatestRecord>('latest'));
     if (latest) this.latest = latest;
-    if (latest) socket.send(JSON.stringify({ type: 'snapshot', ...latest }));
+    if (latest)
+      sendIfOpen(socket, JSON.stringify({ type: 'snapshot', ...latest }));
   }
 
   private schedulePersistence() {
@@ -258,7 +282,7 @@ export class SuikoRoom extends DurableObject<Env> {
     });
     for (const socket of this.ctx.getWebSockets('editor')) {
       const info = socket.deserializeAttachment() as Attachment;
-      if (info.authenticated) socket.send(payload);
+      if (info.authenticated) sendIfOpen(socket, payload);
     }
   }
 
