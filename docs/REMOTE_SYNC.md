@@ -47,8 +47,44 @@ Durable Objectは最新スナップショットを接続中の全表示端末へ
 
 受信WebSocketメッセージは20件を1リクエストとして計算し、送信WebSocketメッセージは課金対象外。現在の編集送信は最大5件/秒なので、連続1時間で約900リクエスト相当。最新版の保存は最大1回/秒、認証の利用時刻更新は最大1回/分なので、連続1時間で最大約3,660行書込となる。実際は入力していない時間に送信・保存しない。無料枠は将来変更されるため、上演前にCloudflareのAnalyticsと公式Pricingを確認する。
 
-- Pricing: https://developers.cloudflare.com/durable-objects/platform/pricing/
-- Limits: https://developers.cloudflare.com/durable-objects/platform/limits/
+無料枠の日次カウントは世界協定時刻の0時、日本時間の午前9時にリセットされる。Freeプランは超過分を自動課金せず、上限を超えた種類の処理がリセットまで失敗する。
+
+### 残り使用量の確認
+
+Cloudflare Dashboardで次の順に確認する。
+
+1. `Workers & Pages` を開き、右側の `Billable usage` を見る。Freeプランでは当日分の課金対象使用量が表示される。
+2. `Workers & Pages` → `suiko-live` → `Metrics` で、Worker全体のリクエスト数とエラー数を見る。
+3. `Durable Objects` → `SuikoRoom` のnamespace → `Metrics` で、対象期間を `Today` または直近24時間にして、リクエスト、実行時間、ストレージの推移を見る。必要なら上演のobject IDで絞り込む。
+4. `Workers & Pages` → `suiko-live` → `Logs` → `Live` で、接続時のエラーをリアルタイムに確認する。
+
+`Billable usage` が使用済み件数を表示する場合、残数は次のように計算する。
+
+```text
+残りリクエスト相当 = 100,000 - 当日の課金対象Durable Objectsリクエスト
+残り行書込        = 100,000 - 当日のSQLite行書込
+```
+
+namespaceのMetricsは動作傾向や異常の確認に使う。WebSocketのグラフには生のメッセージ数が表示されるが、課金上は受信20メッセージを1リクエストとして数えるため、グラフ上のメッセージ数を10万件から直接引かない。
+
+このアプリだけを使っている場合、概算は次の式で求められる。
+
+```text
+課金対象リクエストの概算
+  = WebSocket接続回数
+  + 受信アプリケーションメッセージ数 ÷ 20
+  + HTTP、alarm、RPCなどの回数
+
+最大送信時の1時間
+  = 5メッセージ/秒 × 3,600秒 ÷ 20
+  = 約900リクエスト相当
+
+最大保存時の1時間
+  = 約3,660行書込
+  = 行書込無料枠の約3.66%
+```
+
+8時間をすべて最大頻度で使っても、約7,200リクエスト相当、約29,280行書込となる。現在の設計ではリクエスト数より行書込のほうを先に確認する。Analyticsには反映の遅れや集計差があり得るため、上演では80%を安全確認の目安にする。
 
 ## URL
 
@@ -69,9 +105,76 @@ Durable Objectは最新スナップショットを接続中の全表示端末へ
 
 Cloudflare APIトークンやアカウント情報をGitHub PagesのJavaScriptへ埋め込まない。Workerの公開WebSocket URLは秘密情報ではない。
 
+## 別のPCで開発する
+
+必要なのは、そのPCへの依存パッケージの復元とCloudflare認証である。Worker、Durable Object、workers.devサブドメインを作り直す必要はない。同じCloudflareアカウントへログインすると、公開済みの `suiko-live` を更新できる。
+
+Node.js 22.13以上とGitを用意し、PowerShellで次を実行する。
+
+```powershell
+git clone https://github.com/na-gasena/suiko.git
+cd suiko
+npm ci
+npx wrangler login
+npx wrangler whoami
+```
+
+`npx wrangler login` は初回、ログアウト後、または認証期限が切れたときだけ必要。ブラウザが開いたらCloudflareへのアクセスを許可する。`npx wrangler whoami` にCloudflareアカウント名とIDが表示されれば認証済みである。
+
+`npm ci` は `package-lock.json` の内容どおりに依存パッケージを復元する。別PCで最初にcloneしたとき、または依存関係が更新されたときに実行する。普段の起動のたびには不要。依存パッケージ自体を追加・更新するときだけ `npm install` を使い、変更された `package.json` と `package-lock.json` を一緒にcommitする。
+
+GitHubへpushするには、そのPCでもGitHubの認証が必要。GitHub Actionsの変数 `VITE_REMOTE_WS_URL` はリポジトリ側に保存済みなので、PCごとの再設定は不要。
+
+## Cloudflareの公開状態を確認する
+
+認証、デプロイ履歴、ヘルスチェックを順に確認する。
+
+```powershell
+npx wrangler whoami --json
+npx wrangler deployments list --config wrangler.remote.jsonc
+curl.exe -sS https://suiko-live.nagasena-suiko.workers.dev/health
+```
+
+`whoami` が認証情報を返し、`deployments list` に最新のデプロイがあり、`/health` が正常なJSONを返せば公開状態は正常。Workerを更新するときは次を実行する。
+
+```powershell
+npm run remote:deploy
+```
+
+Cloudflare Dashboardでは `Workers & Pages` → `suiko-live` の `Deployments` でも現在のversionと履歴を確認できる。
+
+リアルタイムログは次のコマンドで表示する。
+
+```powershell
+npx wrangler tail suiko-live --format pretty
+```
+
+またはDashboardの `Workers & Pages` → `suiko-live` → `Logs` → `Live` を使う。WebSocket処理中のログは、接続が閉じたあとにまとまって表示される場合がある。
+
 ## 開発時の確認
 
 別のターミナルで `npm run remote:dev` を起動し、`npm run remote:test` を実行する。テストは編集・表示の2接続を認証し、接続数とスナップショット配信を確認する。画面全体は `npm run dev` で起動し、編集URLと表示URLを別ブラウザで開いて確認する。
+
+公開済みWorkerに対して通信テストを行う場合は、PowerShellで接続先を一時的に指定する。
+
+```powershell
+$env:REMOTE_TEST_URL = "wss://suiko-live.nagasena-suiko.workers.dev"
+npm run remote:test
+Remove-Item Env:REMOTE_TEST_URL
+```
+
+テストは短時間だけ使う上演roomを作る。終了後は24時間の失効処理に任せてよい。
+
+## トラブル時の順序
+
+1. `npx wrangler whoami` で認証を確認する。認証エラーなら `npx wrangler login` をやり直す。
+2. `curl.exe -sS https://suiko-live.nagasena-suiko.workers.dev/health` でWorkerへ到達できるか確認する。
+3. `npx wrangler deployments list --config wrangler.remote.jsonc` で最新版が公開されているか確認する。
+4. `npx wrangler tail suiko-live --format pretty` を開いたまま再接続し、エラー内容を見る。
+5. オンライン画面だけ接続できない場合は、GitHubリポジトリの `Settings` → `Secrets and variables` → `Actions` → `Variables` で `VITE_REMOTE_WS_URL` を確認し、GitHub Pagesを再ビルドする。
+6. 当日分の無料枠が上限に達していたら、日本時間の午前9時のリセットを待つ。
+
+Cloudflareの認証ファイル、APIトークン、`.dev.vars` はGitへcommitしない。編集URLの編集トークンも共有しない。公開してよいのはWorker URLと表示用URLである。
 
 ## 検証項目
 
@@ -87,6 +190,18 @@ Cloudflare APIトークンやアカウント情報をGitHub PagesのJavaScript�
 
 初期実装は編集1台を前提とする。複数端末から同時編集する場合は、単純な最新版優先ではなくCRDT等による競合解決を別設計として追加する。
 
+## 公式資料
+
+- Durable Objects Pricing: https://developers.cloudflare.com/durable-objects/platform/pricing/
+- Durable Objects Limits: https://developers.cloudflare.com/durable-objects/platform/limits/
+- Durable Objects Metrics and analytics: https://developers.cloudflare.com/durable-objects/observability/metrics-and-analytics/
+- Workers Metrics and analytics: https://developers.cloudflare.com/workers/observability/metrics-and-analytics/
+- Workers Real-time logs: https://developers.cloudflare.com/workers/observability/logs/real-time-logs/
+- Wrangler general commands: https://developers.cloudflare.com/workers/wrangler/commands/general/
+- Wrangler Workers commands: https://developers.cloudflare.com/workers/wrangler/commands/workers/
+- Billable usage sidebar: https://developers.cloudflare.com/changelog/post/2026-06-04-billable-usage-product-sidebar/
+
 ## 変更記録
 
+- 2026-09-20: 別PCでのセットアップ、Cloudflareの認証・デプロイ・ログ・無料枠使用量の確認手順を追加。
 - 2026-09-20: 文字サイズを設定スナップショットへ追加。編集面、表示面、折返し計測、消し跡描画へ同じ値を適用。表示面では紙の外枠を描画しない。
