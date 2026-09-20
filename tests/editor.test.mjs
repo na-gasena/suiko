@@ -210,6 +210,38 @@ test('editor: IME commit, trace persistence, break, restore, projection and CSV'
       JSON.parse(localStorage.getItem('suiko-settings')).fontSize,
       64,
     );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        win.HTMLInputElement.prototype,
+        'value',
+      ).set.call(fontSizeInput, '300');
+      fontSizeInput.dispatchEvent(
+        new win.InputEvent('input', { bubbles: true }),
+      );
+      await sleep();
+    });
+    assert.equal(document.querySelector('textarea').style.fontSize, '300px');
+    assert.equal(
+      document.querySelector('textarea').style.lineHeight,
+      '336px',
+      'maximum-size lines retain enough height to avoid clipping each other',
+    );
+    assert.ok(
+      Number.parseFloat(
+        document.querySelector('.paper-writing-layer').style.paddingTop,
+      ) > 0,
+      'maximum-size text is placed inside the paper instead of above its edge',
+    );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        win.HTMLInputElement.prototype,
+        'value',
+      ).set.call(fontSizeInput, '64');
+      fontSizeInput.dispatchEvent(
+        new win.InputEvent('input', { bubbles: true }),
+      );
+      await sleep();
+    });
     const fadeInput = document.querySelector('#fade-seconds');
     assert.equal(fadeInput.max, '3600');
     await act(async () => {

@@ -184,7 +184,7 @@ export function layoutText(
       item.segment === '\t' ? 72 : measure(item.segment) + letterSpacing;
     if (x + width > PAPER_WIDTH - 92 && x > 92) {
       x = 92;
-      y += LINE_HEIGHT;
+      y += lineSpacing;
     }
     glyphs.push({
       text: item.segment,
