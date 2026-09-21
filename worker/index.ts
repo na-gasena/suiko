@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 type Env = { ROOMS: DurableObjectNamespace<SuikoRoom> };
 type Role = 'editor' | 'audience';
-type Attachment = { role: Role; authenticated: boolean };
+type Attachment = { role: Role; authenticated: boolean; clientId?: string };
 type AuthRecord = {
   editorHash: string;
   audienceHash: string;
@@ -12,10 +12,12 @@ type LatestRecord = {
   revision: number;
   serverTime: number;
   editorTime: number;
-  snapshot: unknown;
+  snapshot?: unknown;
+  payload?: string;
 };
 
-const MAX_MESSAGE_BYTES = 256 * 1024;
+// The stored value must remain under the SQLite-backed DO's 2 MB value limit.
+const MAX_MESSAGE_BYTES = 1024 * 1024;
 const ROOM_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const allowedOrigins = new Set([
   'https://na-gasena.github.io',
@@ -117,10 +119,15 @@ export class SuikoRoom extends DurableObject<Env> {
       await this.authenticate(socket, attachment, message);
       return;
     }
-    if (message.type === 'snapshot' && attachment.role === 'editor') {
+    if (
+      (message.type === 'snapshot' || message.type === 'snapshot_gzip') &&
+      attachment.role === 'editor'
+    ) {
       await this.publishSnapshot(
         socket,
-        message.snapshot,
+        message.type === 'snapshot_gzip'
+          ? { payload: message.payload }
+          : { snapshot: message.snapshot },
         Number(message.editorTime),
       );
       return;
@@ -174,6 +181,11 @@ export class SuikoRoom extends DurableObject<Env> {
       return;
     }
     if (attachment.role === 'editor') {
+      const clientId =
+        typeof message.clientId === 'string' &&
+        /^[0-9a-f-]{36}$/.test(message.clientId)
+          ? message.clientId
+          : undefined;
       const activeEditors = this.ctx
         .getWebSockets('editor')
         .filter((editor) => {
@@ -181,7 +193,12 @@ export class SuikoRoom extends DurableObject<Env> {
           const current = editor.deserializeAttachment() as Attachment;
           return current.authenticated && editor.readyState === WebSocket.OPEN;
         });
-      if (activeEditors.length && message.takeover !== true) {
+      const competingEditors = activeEditors.filter(
+        (editor) =>
+          !clientId ||
+          (editor.deserializeAttachment() as Attachment).clientId !== clientId,
+      );
+      if (competingEditors.length && message.takeover !== true) {
         sendIfOpen(
           socket,
           JSON.stringify({ type: 'editor_conflict', serverTime: now }),
@@ -189,11 +206,16 @@ export class SuikoRoom extends DurableObject<Env> {
         socket.close(4009, 'editor_conflict');
         return;
       }
-      if (message.takeover === true)
-        for (const editor of activeEditors)
-          editor.close(4001, 'editor_replaced');
+      for (const editor of activeEditors)
+        editor.close(
+          4001,
+          message.takeover === true ? 'editor_replaced' : 'editor_reconnected',
+        );
     }
     attachment.authenticated = true;
+    if (attachment.role === 'editor')
+      attachment.clientId =
+        typeof message.clientId === 'string' ? message.clientId : undefined;
     socket.serializeAttachment(attachment);
     sendIfOpen(
       socket,
@@ -209,21 +231,31 @@ export class SuikoRoom extends DurableObject<Env> {
 
   private async publishSnapshot(
     editor: WebSocket,
-    snapshot: unknown,
+    content: { snapshot?: unknown; payload?: unknown },
     editorTime: number,
   ) {
-    if (!snapshot || typeof snapshot !== 'object') return;
+    if (
+      (!content.snapshot || typeof content.snapshot !== 'object') &&
+      (typeof content.payload !== 'string' ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(content.payload))
+    )
+      return;
     const previous =
       this.latest || (await this.ctx.storage.get<LatestRecord>('latest'));
     const latest: LatestRecord = {
       revision: (previous?.revision || 0) + 1,
       serverTime: Date.now(),
       editorTime: Number.isFinite(editorTime) ? editorTime : Date.now(),
-      snapshot,
+      ...(typeof content.payload === 'string'
+        ? { payload: content.payload }
+        : { snapshot: content.snapshot }),
     };
     this.latest = latest;
     this.schedulePersistence();
-    const payload = JSON.stringify({ type: 'snapshot', ...latest });
+    const payload = JSON.stringify({
+      type: latest.payload ? 'snapshot_gzip' : 'snapshot',
+      ...latest,
+    });
     for (const socket of this.ctx.getWebSockets('audience')) {
       const info = socket.deserializeAttachment() as Attachment;
       if (info.authenticated) sendIfOpen(socket, payload);
@@ -243,7 +275,13 @@ export class SuikoRoom extends DurableObject<Env> {
       this.latest || (await this.ctx.storage.get<LatestRecord>('latest'));
     if (latest) this.latest = latest;
     if (latest)
-      sendIfOpen(socket, JSON.stringify({ type: 'snapshot', ...latest }));
+      sendIfOpen(
+        socket,
+        JSON.stringify({
+          type: latest.payload ? 'snapshot_gzip' : 'snapshot',
+          ...latest,
+        }),
+      );
   }
 
   private schedulePersistence() {

@@ -1,3 +1,9 @@
+import {
+  compressSnapshot,
+  decompressSnapshot,
+  snapshotBytes,
+} from './snapshot-codec.ts';
+
 export type RemoteRole = 'editor' | 'audience';
 export type RemoteAccess = {
   roomId: string;
@@ -90,6 +96,10 @@ export class RemoteConnection<T> {
   private sendTimer = 0;
   private latest: T | null = null;
   private takeover = false;
+  private sending = false;
+  private pendingSend = false;
+  private lastRevision = 0;
+  private readonly clientId = crypto.randomUUID();
 
   constructor(options: ConnectionOptions<T>) {
     this.options = options;
@@ -145,6 +155,9 @@ export class RemoteConnection<T> {
           type: 'auth',
           token: this.options.access.token,
           audienceToken: this.options.access.audienceToken,
+          ...(this.options.access.role === 'editor'
+            ? { clientId: this.clientId }
+            : {}),
           ...(this.takeover ? { takeover: true } : {}),
         }),
       );
@@ -163,33 +176,51 @@ export class RemoteConnection<T> {
         this.takeover = false;
         this.retry = 0;
         this.options.onState?.('connected');
-        this.flush();
+        void this.flush();
       }
       if (message.type === 'editor_conflict') {
         this.authenticated = false;
         this.options.onState?.('conflict');
         socket.close(4009, 'editor_conflict');
       }
-      if (message.type === 'snapshot' && message.snapshot) {
+      if (
+        (message.type === 'snapshot' || message.type === 'snapshot_gzip') &&
+        (message.snapshot || message.payload)
+      ) {
         const serverTime = Number(message.serverTime) || Date.now();
         const editorTime = Number(message.editorTime) || serverTime;
-        this.options.onSnapshot?.(
-          message.snapshot as T,
-          serverTime - editorTime,
-        );
+        const revision = Number(message.revision) || 0;
+        if (revision <= this.lastRevision) return;
+        if (message.type === 'snapshot_gzip') {
+          void decompressSnapshot<T>(String(message.payload))
+            .then((snapshot) => {
+              if (this.socket !== socket || revision <= this.lastRevision)
+                return;
+              this.lastRevision = revision;
+              this.options.onSnapshot?.(snapshot, serverTime - editorTime);
+            })
+            .catch(() => this.options.onState?.('error'));
+        } else {
+          this.lastRevision = revision;
+          this.options.onSnapshot?.(
+            message.snapshot as T,
+            serverTime - editorTime,
+          );
+        }
       }
       if (message.type === 'presence')
         this.options.onPresence?.(Number(message.audiences) || 0);
     });
     socket.addEventListener('close', (event) => {
-      if (this.socket === socket) this.socket = null;
+      if (this.socket !== socket) return;
+      this.socket = null;
       if (this.stopped || event.code === 1000) return;
       if (event.code === 4001 || event.code === 4009) {
         this.authenticated = false;
         this.options.onState?.('conflict');
         return;
       }
-      if (event.code === 1008) {
+      if (event.code === 1008 || event.code === 1009) {
         this.options.onState?.('error');
         return;
       }
@@ -200,7 +231,7 @@ export class RemoteConnection<T> {
     socket.addEventListener('error', () => socket.close());
   }
 
-  private flush() {
+  private async flush() {
     if (
       !this.latest ||
       !this.authenticated ||
@@ -208,12 +239,39 @@ export class RemoteConnection<T> {
       this.socket?.readyState !== WebSocket.OPEN
     )
       return;
-    this.socket.send(
-      JSON.stringify({
-        type: 'snapshot',
-        editorTime: Date.now(),
-        snapshot: this.latest,
-      }),
-    );
+    if (this.sending) {
+      this.pendingSend = true;
+      return;
+    }
+    this.sending = true;
+    const socket = this.socket;
+    const snapshot = this.latest;
+    try {
+      const payload =
+        snapshotBytes(snapshot) >= 32 * 1024
+          ? await compressSnapshot(snapshot)
+          : null;
+      if (
+        !this.stopped &&
+        this.socket === socket &&
+        this.authenticated &&
+        socket.readyState === WebSocket.OPEN
+      )
+        socket.send(
+          JSON.stringify(
+            payload
+              ? { type: 'snapshot_gzip', editorTime: Date.now(), payload }
+              : { type: 'snapshot', editorTime: Date.now(), snapshot },
+          ),
+        );
+    } catch {
+      this.options.onState?.('error');
+    } finally {
+      this.sending = false;
+      if (this.pendingSend) {
+        this.pendingSend = false;
+        void this.flush();
+      }
+    }
   }
 }

@@ -6,6 +6,7 @@ import {
   RemoteConnection,
   remoteLinks,
 } from '../lib/remote-sync.ts';
+import { decompressSnapshot } from '../lib/snapshot-codec.ts';
 
 test('remote links keep credentials in the fragment and separate editor and audience access', () => {
   const access = createRemoteAccess();
@@ -47,7 +48,7 @@ test('room identifiers are validated before a remote connection is allowed', () 
   );
 });
 
-test('remote editor stays blocked on conflict until this window takes over', () => {
+test('remote editor stays blocked on conflict and keeps its identity on reconnect', async () => {
   const originalWindow = globalThis.window;
   const originalWebSocket = globalThis.WebSocket;
   const sockets = [];
@@ -110,6 +111,30 @@ test('remote editor stays blocked on conflict until this window takes over', () 
     assert.equal(sockets[1].sent[0].takeover, true);
     sockets[1].message({ type: 'authenticated' });
     assert.equal(states.at(-1), 'connected');
+    const clientId = sockets[1].sent[0].clientId;
+    assert.ok(clientId);
+    sockets[1].close(1006, 'network_lost');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    assert.equal(sockets.length, 3);
+    sockets[2].open();
+    assert.equal(sockets[2].sent[0].clientId, clientId);
+    assert.equal(sockets[2].sent[0].takeover, undefined);
+    sockets[1].emit('close', { code: 4001, reason: 'stale_close' });
+    assert.equal(states.at(-1), 'reconnecting');
+    sockets[2].message({ type: 'authenticated' });
+    assert.equal(states.at(-1), 'connected');
+    const longSnapshot = {
+      text: '推敲',
+      marks: Array.from({ length: 2000 }, (_, index) => ({
+        id: `${index}-${crypto.randomUUID()}`,
+        text: '花',
+      })),
+    };
+    connection.sendSnapshot(longSnapshot);
+    await new Promise((resolve) => setTimeout(resolve, 280));
+    const sent = sockets[2].sent.at(-1);
+    assert.equal(sent.type, 'snapshot_gzip');
+    assert.deepEqual(await decompressSnapshot(sent.payload), longSnapshot);
     connection.stop();
   } finally {
     globalThis.window = originalWindow;

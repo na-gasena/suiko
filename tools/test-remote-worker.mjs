@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
+import {
+  compressSnapshot,
+  decompressSnapshot,
+  snapshotBytes,
+} from '../lib/snapshot-codec.ts';
 
 const endpoint = process.env.REMOTE_TEST_URL || 'ws://127.0.0.1:8787';
 const roomId = `test_${crypto.randomUUID().replaceAll('-', '')}`;
 const editorToken = crypto.randomUUID().replaceAll('-', '');
 const audienceToken = crypto.randomUUID().replaceAll('-', '');
+const editorClientId = crypto.randomUUID();
 
 function connect(role) {
   const socket = new WebSocket(`${endpoint}/rooms/${roomId}?role=${role}`);
@@ -50,6 +56,7 @@ editor.socket.send(
     type: 'auth',
     token: editorToken,
     audienceToken,
+    clientId: editorClientId,
   }),
 );
 await editor.next('authenticated');
@@ -89,6 +96,33 @@ const delivered = await audience.next('snapshot');
 assert.deepEqual(delivered.snapshot, expected);
 assert.equal(typeof delivered.serverTime, 'number');
 
+const longSnapshot = {
+  text: '長時間の推敲',
+  marks: Array.from({ length: 3000 }, (_, index) => ({
+    id: crypto.randomUUID(),
+    sessionId: roomId,
+    text: '花',
+    x: 480,
+    y: 300,
+    createdAt: Date.now() - index * 700,
+    temporary: false,
+  })),
+};
+assert.ok(snapshotBytes(longSnapshot) > 256 * 1024);
+editor.socket.send(
+  JSON.stringify({
+    type: 'snapshot_gzip',
+    editorTime: Date.now(),
+    payload: await compressSnapshot(longSnapshot),
+  }),
+);
+const compressedDelivery = await audience.next('snapshot_gzip');
+assert.deepEqual(
+  await decompressSnapshot(compressedDelivery.payload),
+  longSnapshot,
+);
+
+const replacementClientId = crypto.randomUUID();
 const replacementEditor = connect('editor');
 await replacementEditor.opened;
 replacementEditor.socket.send(
@@ -97,6 +131,7 @@ replacementEditor.socket.send(
     token: editorToken,
     audienceToken,
     takeover: true,
+    clientId: replacementClientId,
   }),
 );
 await replacementEditor.next('authenticated');
@@ -114,6 +149,21 @@ replacementEditor.socket.send(
 const replacementDelivered = await audience.next('snapshot');
 assert.deepEqual(replacementDelivered.snapshot, replaced);
 
-replacementEditor.socket.close();
+const resumedEditor = connect('editor');
+await resumedEditor.opened;
+resumedEditor.socket.send(
+  JSON.stringify({
+    type: 'auth',
+    token: editorToken,
+    audienceToken,
+    clientId: replacementClientId,
+  }),
+);
+await resumedEditor.next('authenticated');
+const resumedClose = await replacementEditor.closed;
+assert.equal(resumedClose.code, 4001);
+
+resumedEditor.socket.close();
+
 audience.socket.close();
-console.log('Remote Worker single-editor and takeover test passed.');
+console.log('Remote Worker long-session, single-editor and reconnect test passed.');
